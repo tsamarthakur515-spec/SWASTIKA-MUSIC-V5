@@ -1,24 +1,10 @@
 # SWASTIKA MUSIC V5
 
-Telegram VC Music Bot — full codebase copied from **SWASTIKA-MUSICV4** (direct copy, not a GitHub fork).
+Full code copied from SWASTIKA-MUSICV4 (direct copy, not a fork).
 
-## Structure
+## Setup
+1. Fill `Config.env`
+2. `pip install -r requirements.txt`
+3. `python3 main.py`
 
-- `PANDAMUSIC/` — main package
-- `main.py` — entry point
-- `Config.env` — bot variables
-- `requirements.txt`
-
-## Quick Start
-
-```bash
-pip3 install -r requirements.txt
-# Edit Config.env
-python3 main.py
-```
-
-## Features
-
-Music play, welcome, chatbot (Groq), games, moderation, tagall, and more.
-
-Made for Swastika Music.
+Default Groq model: `openai/gpt-oss-20b`
