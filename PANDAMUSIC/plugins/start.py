@@ -19,9 +19,11 @@ except Exception:
 
 # Title emoji for welcome caption
 E_TITLE = "6111778259374971023"
-# ONLY /start + /help (category) menus
+# /start menu buttons (except help and commands)
 E_START_HELP = "6147614817952735246"
-# Inner command buttons (play, mute, etc.) — unchanged
+# ONLY "help and commands" button on /start
+E_HELP_AND_CMD = "6154314112236001069"
+# Inner command buttons (play, mute, etc.)
 E_CMD_BTN = "5823571441118876120"
 
 
@@ -107,13 +109,9 @@ CMD_USAGE = {
 
 
 def _cmd_rows(commands, per_row=2):
-    """Inner command buttons — E_CMD_BTN only (not start/help emoji)."""
     rows, row, styles = [], [], [_PRIMARY, _SUCCESS, _DANGER]
     for i, (key, _label) in enumerate(commands):
-        kw = {
-            "callback_data": f"cmdhelp|{key}",
-            "icon_custom_emoji_id": E_CMD_BTN,
-        }
+        kw = {"callback_data": f"cmdhelp|{key}", "icon_custom_emoji_id": E_CMD_BTN}
         row.append(_btn(smallcaps(key), styles[i % 3], **kw))
         if len(row) == per_row:
             rows.append(row)
@@ -131,7 +129,6 @@ def _back_row():
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
-    """/start menu — ONLY E_START_HELP emoji."""
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
@@ -157,13 +154,13 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
         [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START_HELP)],
         [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START_HELP)],
         [support_btn, update_btn],
-        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_START_HELP)],
+        # ONLY this button uses E_HELP_AND_CMD
+        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_HELP_AND_CMD)],
         [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START_HELP)],
     ])
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
-    """/help category menu — ONLY E_START_HELP emoji."""
     return InlineKeyboardMarkup([
         [
             _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_START_HELP),
