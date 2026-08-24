@@ -26,10 +26,19 @@ _RNG = secrets.SystemRandom()
 
 # Games menu buttons emoji
 E_GAMES = "6154314112236001069"
-# Games menu caption emojis
+# Games main caption emojis
 E_GAMES_T1 = "6152030379340470754"
 E_GAMES_T2 = "6154418140638877189"
 E_GAMES_T3 = "6151949350487470820"
+# Games INNER category caption emojis
+E_IN1 = "6149920283382783110"
+E_IN2 = "6147765446750773814"
+E_IN3 = "6147748799457534087"
+E_IN4 = "6147682648371241032"
+E_IN5 = "6147746063563367109"
+E_IN6 = "6111504695728020416"
+E_IN7 = "6113756310858111612"
+E_IN8 = "6111778259374971023"
 
 SHOP = {
     "sword": {"price": 1500, "name": "🗡️ Sword", "atk": 15, "slot": "weapon"},
@@ -77,39 +86,15 @@ def _user(data: dict, user_id: int) -> dict:
     key = _uid(user_id)
     if key not in data["users"]:
         data["users"][key] = {
-            "coins": 1000,
-            "bank": 0,
-            "xp": 0,
-            "wins": 0,
-            "losses": 0,
-            "kills": 0,
-            "inventory": {},
-            "hp": 100,
-            "last_daily": 0,
-            "streak": 0,
-            "last_claim": 0,
-            "protect_until": 0,
-            "alive": True,
-            "last_kill": 0,
-            "last_rob": 0,
-            "last_slots": 0,
+            "coins": 1000, "bank": 0, "xp": 0, "wins": 0, "losses": 0, "kills": 0,
+            "inventory": {}, "hp": 100, "last_daily": 0, "streak": 0, "last_claim": 0,
+            "protect_until": 0, "alive": True, "last_kill": 0, "last_rob": 0, "last_slots": 0,
         }
     u = data["users"][key]
-    u.setdefault("coins", 1000)
-    u.setdefault("inventory", {})
-    u.setdefault("hp", 100)
-    u.setdefault("alive", True)
-    u.setdefault("protect_until", 0)
-    u.setdefault("wins", 0)
-    u.setdefault("losses", 0)
-    u.setdefault("kills", 0)
-    u.setdefault("xp", 0)
-    u.setdefault("streak", 0)
-    u.setdefault("last_daily", 0)
-    u.setdefault("last_claim", 0)
-    u.setdefault("last_kill", 0)
-    u.setdefault("last_rob", 0)
-    u.setdefault("last_slots", 0)
+    for k, v in {"coins": 1000, "inventory": {}, "hp": 100, "alive": True, "protect_until": 0,
+                 "wins": 0, "losses": 0, "kills": 0, "xp": 0, "streak": 0, "last_daily": 0,
+                 "last_claim": 0, "last_kill": 0, "last_rob": 0, "last_slots": 0}.items():
+        u.setdefault(k, v)
     return u
 
 
@@ -127,11 +112,7 @@ def _is_dead(u: dict) -> bool:
 
 def _rank(data: dict, user_id: int) -> int:
     users = data.get("users") or {}
-    ranked = sorted(
-        users.items(),
-        key=lambda x: int(x[1].get("coins", 0)),
-        reverse=True,
-    )
+    ranked = sorted(users.items(), key=lambda x: int(x[1].get("coins", 0)), reverse=True)
     uid = str(user_id)
     for i, (k, _) in enumerate(ranked, 1):
         if k == uid:
@@ -140,9 +121,7 @@ def _rank(data: dict, user_id: int) -> int:
 
 
 def _gear(inv: dict):
-    weapon = "None"
-    armor = "None"
-    flex = []
+    weapon, armor, flex = "None", "None", []
     for key, qty in (inv or {}).items():
         if qty <= 0:
             continue
@@ -160,11 +139,9 @@ def _gear(inv: dict):
 
 def _spin_slots():
     roll = _RNG.randint(1, 100)
-
     if roll <= 70:
         a, b, c = _RNG.sample(SLOT_ICONS, 3)
         return a, b, c, 0, "💨 No luck — try again"
-
     if roll <= 92:
         icon = _RNG.choice(["🍒", "🍋", "🔔", "⭐"])
         other = _RNG.choice([x for x in SLOT_ICONS if x != icon])
@@ -175,11 +152,9 @@ def _spin_slots():
         elif pos == 2:
             reels = [other, icon, icon]
         return reels[0], reels[1], reels[2], 70, "✨ Pair! +$70"
-
     if roll <= 99:
         icon = _RNG.choice(["🍒", "🍋", "🔔", "⭐", "7️⃣"])
         return icon, icon, icon, 200, f"🎉 Triple {icon}! +$200"
-
     return "💎", "💎", "💎", 500, "💎 JACKPOT! +$500"
 
 
@@ -204,32 +179,18 @@ def _btn(text, **kwargs):
 
 
 def games_menu_markup():
-    return InlineKeyboardMarkup(
-        [
-            [
-                _btn("Social", callback_data="games_social"),
-                _btn("Economy", callback_data="games_economy"),
-            ],
-            [
-                _btn("RPG", callback_data="games_rpg"),
-                _btn("AI & Fun", callback_data="games_fun"),
-            ],
-            [
-                _btn("Back", callback_data="help_menu"),
-            ],
-        ]
-    )
+    return InlineKeyboardMarkup([
+        [_btn("Social", callback_data="games_social"), _btn("Economy", callback_data="games_economy")],
+        [_btn("RPG", callback_data="games_rpg"), _btn("AI & Fun", callback_data="games_fun")],
+        [_btn("Back", callback_data="help_menu")],
+    ])
 
 
 def games_back_markup():
-    return InlineKeyboardMarkup(
-        [
-            [
-                _btn("Games", callback_data="games_menu"),
-                _btn("Help", callback_data="help_menu"),
-            ]
-        ]
-    )
+    return InlineKeyboardMarkup([[
+        _btn("Games", callback_data="games_menu"),
+        _btn("Help", callback_data="help_menu"),
+    ]])
 
 
 def games_menu_caption() -> str:
@@ -241,20 +202,73 @@ def games_menu_caption() -> str:
     return f"<blockquote expandable>{body}</blockquote>"
 
 
+def social_caption() -> str:
+    body = (
+        f"{tg_emoji(E_IN1, '💍')} {smallcaps('social & friends')}\n\n"
+        f"{tg_emoji(E_IN2, '✨')} <b>/friend @user</b>\n↳ {smallcaps('send a friend request / add friend.')}\n\n"
+        f"{tg_emoji(E_IN3, '✨')} <b>/friends</b>\n↳ {smallcaps('see your friends list.')}\n\n"
+        f"{tg_emoji(E_IN4, '✨')} <b>/unfriend @user</b>\n↳ {smallcaps('remove a friend.')}\n\n"
+        f"{tg_emoji(E_IN5, '✨')} <b>/buddy</b>\n↳ {smallcaps('random buddy match suggestion.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def economy_caption() -> str:
+    body = (
+        f"{tg_emoji(E_IN6, '💰')} {smallcaps('economy & shop')}\n\n"
+        f"{tg_emoji(E_IN7, '✨')} <b>/bal</b> — {smallcaps('own profile')}\n"
+        f"{tg_emoji(E_IN8, '✨')} <b>/bal @user</b> — {smallcaps('see their profile')}\n"
+        f"{tg_emoji(E_IN1, '✨')} <b>/shop</b> — {smallcaps('buy items')}\n"
+        f"{tg_emoji(E_IN2, '✨')} <b>/buy [item]</b> — {smallcaps('purchase from shop')}\n"
+        f"{tg_emoji(E_IN3, '✨')} <b>/give [amt] @user</b> — {smallcaps('transfer (10% tax)')}\n"
+        f"{tg_emoji(E_IN4, '✨')} <b>/claim</b> — {smallcaps('group bonus (2k)')}\n"
+        f"{tg_emoji(E_IN5, '✨')} <b>/daily</b> — {smallcaps('daily streak rewards')}\n"
+        f"{tg_emoji(E_IN6, '✨')} <b>/ranking</b> — {smallcaps('top richest players')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def rpg_caption() -> str:
+    body = (
+        f"{tg_emoji(E_IN7, '⚔️')} {smallcaps('rpg & battle')}\n\n"
+        f"{tg_emoji(E_IN8, '✨')} <b>/kill</b> ({smallcaps('reply')})\n↳ {smallcaps('game ko + random loot')}\n\n"
+        f"{tg_emoji(E_IN1, '✨')} <b>/battle @user</b>\n↳ {smallcaps('friendly duel. winner gains coins & xp!')}\n\n"
+        f"{tg_emoji(E_IN2, '✨')} <b>/rob [amt]</b>\n↳ {smallcaps('steal up to their balance (risk of fail)')}\n\n"
+        f"{tg_emoji(E_IN3, '✨')} <b>/protect</b>\n↳ {smallcaps('buy 24h shield (800 coins).')}\n\n"
+        f"{tg_emoji(E_IN4, '✨')} <b>/revive</b>\n↳ {smallcaps('restore hp for 500 coins.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def fun_caption() -> str:
+    body = (
+        f"{tg_emoji(E_IN5, '🧠')} {smallcaps('ai & fun')}\n\n"
+        f"{tg_emoji(E_IN6, '✨')} <b>/riddle</b> — {smallcaps('random riddle quiz')}\n"
+        f"{tg_emoji(E_IN7, '✨')} <b>/dice</b> — {smallcaps('roll a dice')}\n"
+        f"{tg_emoji(E_IN8, '✨')} <b>/slots</b> — {smallcaps('virtual slot machine')}\n"
+        f"{tg_emoji(E_IN1, '✨')} <b>/coinflip</b> — {smallcaps('heads or tails')}\n\n"
+        f"{tg_emoji(E_IN2, '✨')} {smallcaps('chatbot: use')} <b>/chaton</b> {smallcaps('from help menu.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+async def _edit(query, text, markup):
+    try:
+        await query.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            await query.message.edit_caption(caption=text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+
+
 # ── Menu callbacks ─────────────────────────────────────────────
 
 @bot.on_callback_query(rgx("games_menu"))
 async def games_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = games_menu_caption()
-    try:
-        await query.message.edit_text(text, reply_markup=games_menu_markup(), parse_mode=ParseMode.HTML)
-    except Exception:
-        try:
-            await query.message.edit_caption(caption=text, reply_markup=games_menu_markup(), parse_mode=ParseMode.HTML)
-        except Exception:
-            pass
+    await _edit(query, games_menu_caption(), games_menu_markup())
     await query.answer()
 
 
@@ -262,17 +276,7 @@ async def games_menu_cb(client, query):
 async def games_social_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = (
-        "<b>💍 Social & Friends</b>\n\n"
-        "<b>/friend @user</b>\n↳ Send a friend request / add friend.\n\n"
-        "<b>/friends</b>\n↳ See your friends list.\n\n"
-        "<b>/unfriend @user</b>\n↳ Remove a friend.\n\n"
-        "<b>/buddy</b>\n↳ Random buddy match suggestion."
-    )
-    try:
-        await query.message.edit_text(text, reply_markup=games_back_markup(), parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
+    await _edit(query, social_caption(), games_back_markup())
     await query.answer()
 
 
@@ -280,21 +284,7 @@ async def games_social_cb(client, query):
 async def games_economy_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = (
-        "<b>💰 Economy & Shop</b>\n\n"
-        "<b>/bal</b> — Own profile\n"
-        "<b>/bal @user</b> or reply — See their profile\n"
-        "<b>/shop</b> — Buy items\n"
-        "<b>/buy [item]</b> — Purchase from shop\n"
-        "<b>/give [amt] @user</b> — Transfer (10% tax)\n"
-        "<b>/claim</b> — Group bonus (2k)\n"
-        "<b>/daily</b> — Daily streak rewards\n"
-        "<b>/ranking</b> — Top richest players"
-    )
-    try:
-        await query.message.edit_text(text, reply_markup=games_back_markup(), parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
+    await _edit(query, economy_caption(), games_back_markup())
     await query.answer()
 
 
@@ -302,18 +292,7 @@ async def games_economy_cb(client, query):
 async def games_rpg_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = (
-        "<b>⚔️ RPG & Battle</b>\n\n"
-        "<b>/kill</b> (reply)\n↳ Game KO + random loot\n\n"
-        "<b>/battle @user</b>\n↳ Friendly duel. Winner gains coins & XP!\n\n"
-        "<b>/rob [amt]</b> reply or <b>/rob [amt] @user</b>\n↳ Steal up to their balance (risk of fail)\n\n"
-        "<b>/protect</b>\n↳ Buy 24h shield (800 coins).\n\n"
-        "<b>/revive</b>\n↳ Restore HP for 500 coins."
-    )
-    try:
-        await query.message.edit_text(text, reply_markup=games_back_markup(), parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
+    await _edit(query, rpg_caption(), games_back_markup())
     await query.answer()
 
 
@@ -321,18 +300,7 @@ async def games_rpg_cb(client, query):
 async def games_fun_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = (
-        "<b>🧠 AI & Fun</b>\n\n"
-        "<b>/riddle</b> — Random riddle quiz\n"
-        "<b>/dice</b> — Roll a dice\n"
-        "<b>/slots</b> — Virtual slot machine\n"
-        "<b>/coinflip</b> — Heads or tails\n\n"
-        "Chatbot: use <b>/chaton</b> from Help menu."
-    )
-    try:
-        await query.message.edit_text(text, reply_markup=games_back_markup(), parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
+    await _edit(query, fun_caption(), games_back_markup())
     await query.answer()
 
 
@@ -344,7 +312,6 @@ async def bal_cmd(client, message: Message):
         return
     if not message.from_user:
         return
-
     target = message.from_user
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
@@ -353,37 +320,22 @@ async def bal_cmd(client, message: Message):
             target = await client.get_users(message.command[1])
         except Exception:
             return await message.reply_text("❌ User not found.")
-
     if target.is_bot:
         return await message.reply_text("❌ Bots have no wallet.")
-
     data = _load()
     u = _user(data, target.id)
     _save(data)
-
     rank = _rank(data, target.id)
     alive = not _is_dead(u)
     status = "❤️ Alive" if alive else "💀 Dead"
     kills = int(u.get("kills") or 0)
     coins = int(u.get("coins") or 0)
-
     weapon, armor, flex = _gear(u.get("inventory") or {})
-    if flex:
-        flex_txt = "\n".join(f"• {x}" for x in flex)
-    else:
-        flex_txt = "(No flex items owned)"
-
+    flex_txt = "\n".join(f"• {x}" for x in flex) if flex else "(No flex items owned)"
     text = (
-        f"👤 User: {_mention(target)}\n"
-        f"👛 Balance: ${coins:,}\n"
-        f"🏆 Rank: #{rank}\n"
-        f"❤️ Status: {status}\n"
-        f"⚔️ Kills: {kills}\n\n"
-        f"🎒 <b>Active Gear:</b>\n"
-        f"🗡️ Weapon: {weapon}\n"
-        f"🛡️ Armor: {armor}\n\n"
-        f"💎 <b>Flex Collection:</b>\n"
-        f"{flex_txt}"
+        f"👤 User: {_mention(target)}\n👛 Balance: ${coins:,}\n🏆 Rank: #{rank}\n"
+        f"❤️ Status: {status}\n⚔️ Kills: {kills}\n\n🎒 <b>Active Gear:</b>\n"
+        f"🗡️ Weapon: {weapon}\n🛡️ Armor: {armor}\n\n💎 <b>Flex Collection:</b>\n{flex_txt}"
     )
     await message.reply_text(text, parse_mode=ParseMode.HTML)
 
@@ -418,10 +370,7 @@ async def buy_cmd(client, message: Message):
     inv = u.setdefault("inventory", {})
     inv[item_key] = inv.get(item_key, 0) + 1
     _save(data)
-    await message.reply_text(
-        f"✅ Bought <b>{SHOP[item_key]['name']}</b> for ${price:,}!",
-        parse_mode=ParseMode.HTML,
-    )
+    await message.reply_text(f"✅ Bought <b>{SHOP[item_key]['name']}</b> for ${price:,}!", parse_mode=ParseMode.HTML)
 
 
 @bot.on_message(cdx(["give", "pay", "transfer"]))
@@ -438,7 +387,6 @@ async def give_cmd(client, message: Message):
         return await message.reply_text("❌ Invalid amount.")
     if amount <= 0:
         return await message.reply_text("❌ Amount must be positive.")
-
     target = None
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
@@ -453,7 +401,6 @@ async def give_cmd(client, message: Message):
         return await message.reply_text("❌ You cannot give coins to yourself.")
     if target.is_bot:
         return await message.reply_text("❌ Cannot give to bots.")
-
     data = _load()
     sender = _user(data, message.from_user.id)
     receiver = _user(data, target.id)
@@ -465,8 +412,7 @@ async def give_cmd(client, message: Message):
     receiver["coins"] += amount
     _save(data)
     await message.reply_text(
-        f"✅ {_mention(message.from_user)} sent <b>${amount:,}</b> to {_mention(target)}\n"
-        f"💸 Tax: ${tax:,}",
+        f"✅ {_mention(message.from_user)} sent <b>${amount:,}</b> to {_mention(target)}\n💸 Tax: ${tax:,}",
         parse_mode=ParseMode.HTML,
     )
 
@@ -489,8 +435,7 @@ async def daily_cmd(client, message: Message):
         u["streak"] = int(u.get("streak") or 0) + 1
     else:
         u["streak"] = 1
-    reward = 500 + (u["streak"] * 50)
-    reward = min(reward, 2000)
+    reward = min(500 + (u["streak"] * 50), 2000)
     u["coins"] += reward
     u["xp"] += 10
     u["last_daily"] = now
@@ -516,14 +461,10 @@ async def claim_cmd(client, message: Message):
     if now - last < 3600:
         left = int(3600 - (now - last))
         return await message.reply_text(f"⏳ Claim cooldown: {left // 60}m left.")
-    reward = 2000
-    u["coins"] += reward
+    u["coins"] += 2000
     u["last_claim"] = now
     _save(data)
-    await message.reply_text(
-        f"🎉 Group bonus claimed! +<b>${reward:,}</b>",
-        parse_mode=ParseMode.HTML,
-    )
+    await message.reply_text("🎉 Group bonus claimed! +<b>$2,000</b>", parse_mode=ParseMode.HTML)
 
 
 @bot.on_message(cdx(["ranking", "rich", "top"]))
@@ -558,7 +499,6 @@ async def friend_cmd(client, message: Message):
         return await message.reply_text("❌ That's you!")
     if target.is_bot:
         return await message.reply_text("❌ Bots can't be friends.")
-
     data = _load()
     a, b = sorted([str(message.from_user.id), str(target.id)])
     key = f"{a}:{b}"
@@ -590,10 +530,7 @@ async def unfriend_cmd(client, message: Message):
         return await message.reply_text("❌ You are not friends.")
     del friends[key]
     _save(data)
-    await message.reply_text(
-        f"👋 Unfriended {_mention(target)}.",
-        parse_mode=ParseMode.HTML,
-    )
+    await message.reply_text(f"👋 Unfriended {_mention(target)}.", parse_mode=ParseMode.HTML)
 
 
 @bot.on_message(cdx(["friends", "friendlist"]))
@@ -630,8 +567,7 @@ async def buddy_cmd(client, message: Message):
         "Play /slots together and compare luck!",
     ]
     await message.reply_text(
-        f"🎲 <b>Buddy tip</b>\n\n{random.choice(tips)}\n\n"
-        f"Use <code>/friend @user</code> to add someone!",
+        f"🎲 <b>Buddy tip</b>\n\n{random.choice(tips)}\n\nUse <code>/friend @user</code> to add someone!",
         parse_mode=ParseMode.HTML,
     )
 
@@ -644,56 +580,39 @@ async def kill_cmd(client, message: Message):
         return
     if not message.from_user:
         return
-
     if not (message.reply_to_message and message.reply_to_message.from_user):
         return await message.reply_text("Reply to a user with <code>/kill</code>", parse_mode=ParseMode.HTML)
-
     target = message.reply_to_message.from_user
     killer = message.from_user
-
     if target.id == killer.id:
         return await message.reply_text("❌ You can't target yourself.")
     if target.is_bot:
         return await message.reply_text("❌ Can't target bots.")
-
     data = _load()
     k = _user(data, killer.id)
     v = _user(data, target.id)
-
     now = time.time()
     if now - float(k.get("last_kill") or 0) < 30:
         left = int(30 - (now - float(k["last_kill"])))
         return await message.reply_text(f"⏳ Wait {left}s before next /kill.")
-
     if _is_dead(k):
-        return await message.reply_text(
-            f"💀 <b>You are already dead!</b>\n"
-            f"Use /revive to come back.",
-            parse_mode=ParseMode.HTML,
-        )
-
+        return await message.reply_text("💀 <b>You are already dead!</b>\nUse /revive to come back.", parse_mode=ParseMode.HTML)
     if v.get("protect_until", 0) > now:
         return await message.reply_text("🛡️ Target is protected!")
-
     if _is_dead(v):
         return await message.reply_text(
-            f"💀 {_mention(target)} is <b>already dead!</b>\n"
-            f"They need /revive first.",
+            f"💀 {_mention(target)} is <b>already dead!</b>\nThey need /revive first.",
             parse_mode=ParseMode.HTML,
         )
-
     if random.random() > 0.55:
         k["last_kill"] = now
         fine = min(k["coins"], random.randint(20, 80))
         k["coins"] -= fine
         _save(data)
         return await message.reply_text(
-            f"😅 Missed! {_mention(killer)} failed and lost <b>${fine}</b>",
-            parse_mode=ParseMode.HTML,
+            f"😅 Missed! {_mention(killer)} failed and lost <b>${fine}</b>", parse_mode=ParseMode.HTML,
         )
-
-    loot = random.randint(50, 250)
-    loot = min(loot, max(0, v["coins"]))
+    loot = min(random.randint(50, 250), max(0, v["coins"]))
     v["coins"] = max(0, v["coins"] - loot)
     k["coins"] += loot
     k["xp"] += 10
@@ -704,14 +623,11 @@ async def kill_cmd(client, message: Message):
     v["alive"] = False
     k["last_kill"] = now
     _save(data)
-
-    text = (
+    await message.reply_text(
         f"📝 {_mention(killer)} kill {_mention(target)}!\n\n"
-        f"😈 Killer: {_mention(killer)}\n"
-        f"💀 Victim: {_mention(target)}\n"
-        f"💵 Loot: ${loot}"
+        f"😈 Killer: {_mention(killer)}\n💀 Victim: {_mention(target)}\n💵 Loot: ${loot}",
+        parse_mode=ParseMode.HTML,
     )
-    await message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 @bot.on_message(cdx(["battle", "fight", "duel"]))
@@ -727,34 +643,24 @@ async def battle_cmd(client, message: Message):
         return await message.reply_text("❌ Can't battle yourself.")
     if target.is_bot:
         return await message.reply_text("❌ Can't battle bots.")
-
     data = _load()
     a = _user(data, message.from_user.id)
     b = _user(data, target.id)
     if _is_dead(a):
         return await message.reply_text("💀 You are already dead! Use /revive first.")
     if _is_dead(b):
-        return await message.reply_text(
-            f"💀 {_mention(target)} is already dead! They need /revive.",
-            parse_mode=ParseMode.HTML,
-        )
-
+        return await message.reply_text(f"💀 {_mention(target)} is already dead! They need /revive.", parse_mode=ParseMode.HTML)
     a_roll = random.randint(1, 100) + min(20, a.get("xp", 0) // 50)
     b_roll = random.randint(1, 100) + min(20, b.get("xp", 0) // 50)
-    stake = 100
-
     if a_roll >= b_roll:
-        win, lose = a, b
-        winner = message.from_user
+        win, lose, winner = a, b, message.from_user
         a["wins"] += 1
         b["losses"] += 1
     else:
-        win, lose = b, a
-        winner = target
+        win, lose, winner = b, a, target
         b["wins"] += 1
         a["losses"] += 1
-
-    gain = min(stake, lose["coins"])
+    gain = min(100, lose["coins"])
     lose["coins"] = max(0, lose["coins"] - gain)
     win["coins"] += gain
     win["xp"] += 15
@@ -763,12 +669,9 @@ async def battle_cmd(client, message: Message):
         lose["alive"] = False
         lose["hp"] = 0
     _save(data)
-
     await message.reply_text(
-        f"⚔️ <b>BATTLE</b>\n\n"
-        f"{_mention(message.from_user)} rolled <b>{a_roll}</b>\n"
-        f"{_mention(target)} rolled <b>{b_roll}</b>\n\n"
-        f"🏆 Winner: {_mention(winner)} (+${gain}, +15 XP)",
+        f"⚔️ <b>BATTLE</b>\n\n{_mention(message.from_user)} rolled <b>{a_roll}</b>\n"
+        f"{_mention(target)} rolled <b>{b_roll}</b>\n\n🏆 Winner: {_mention(winner)} (+${gain}, +15 XP)",
         parse_mode=ParseMode.HTML,
     )
 
@@ -779,23 +682,17 @@ async def rob_cmd(client, message: Message):
         return
     if not message.from_user:
         return
-
     if len(message.command) < 2:
         return await message.reply_text(
-            "Usage:\n"
-            "• Reply: <code>/rob 100</code>\n"
-            "• Mention: <code>/rob 100 @user</code>",
+            "Usage:\n• Reply: <code>/rob 100</code>\n• Mention: <code>/rob 100 @user</code>",
             parse_mode=ParseMode.HTML,
         )
-
     try:
         amount = int(str(message.command[1]).replace(",", "").replace("$", ""))
     except ValueError:
         return await message.reply_text("❌ Invalid amount. Example: <code>/rob 100</code>", parse_mode=ParseMode.HTML)
-
     if amount <= 0:
         return await message.reply_text("❌ Amount must be positive.")
-
     target = None
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
@@ -804,52 +701,36 @@ async def rob_cmd(client, message: Message):
             target = await client.get_users(message.command[2])
         except Exception:
             target = None
-
     if not target:
-        return await message.reply_text(
-            "❌ Reply to a user or use <code>/rob 100 @user</code>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("❌ Reply to a user or use <code>/rob 100 @user</code>", parse_mode=ParseMode.HTML)
     if target.id == message.from_user.id:
         return await message.reply_text("❌ You can't rob yourself.")
     if target.is_bot:
         return await message.reply_text("❌ Can't rob bots.")
-
     data = _load()
     thief = _user(data, message.from_user.id)
     victim = _user(data, target.id)
-
     now = time.time()
     if now - float(thief.get("last_rob") or 0) < 20:
         left = int(20 - (now - float(thief["last_rob"])))
         return await message.reply_text(f"⏳ Wait {left}s before next /rob.")
-
     if victim.get("protect_until", 0) > now:
         return await message.reply_text("🛡️ Target is protected!")
-
     victim_bal = int(victim.get("coins") or 0)
     if victim_bal <= 0:
-        return await message.reply_text(
-            f"❌ {_mention(target)} has <b>$0</b> — nothing to rob.",
-            parse_mode=ParseMode.HTML,
-        )
-
+        return await message.reply_text(f"❌ {_mention(target)} has <b>$0</b> — nothing to rob.", parse_mode=ParseMode.HTML)
     steal = min(amount, victim_bal)
     capped = steal < amount
-
     success = random.random() < 0.45
     thief["last_rob"] = now
-
     if success:
         victim["coins"] = victim_bal - steal
         thief["coins"] = int(thief.get("coins") or 0) + steal
         _save(data)
         extra = f"\nℹ️ Asked ${amount:,} but target only had ${victim_bal:,}." if capped else ""
         await message.reply_text(
-            f"🕵️ <b>ROB SUCCESS</b>\n\n"
-            f"😈 Robber: {_mention(message.from_user)}\n"
-            f"💀 Victim: {_mention(target)}\n"
-            f"💵 Stolen: <b>${steal:,}</b>{extra}",
+            f"🕵️ <b>ROB SUCCESS</b>\n\n😈 Robber: {_mention(message.from_user)}\n"
+            f"💀 Victim: {_mention(target)}\n💵 Stolen: <b>${steal:,}</b>{extra}",
             parse_mode=ParseMode.HTML,
         )
     else:
@@ -857,9 +738,7 @@ async def rob_cmd(client, message: Message):
         thief["coins"] = int(thief.get("coins") or 0) - fine
         _save(data)
         await message.reply_text(
-            f"🚨 <b>ROB FAILED</b>\n\n"
-            f"{_mention(message.from_user)} got caught!\n"
-            f"💸 Fine: <b>${fine:,}</b>",
+            f"🚨 <b>ROB FAILED</b>\n\n{_mention(message.from_user)} got caught!\n💸 Fine: <b>${fine:,}</b>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -920,59 +799,33 @@ async def slots_cmd(client, message: Message):
         return
     if not message.from_user:
         return
-
     cost = 50
     data = _load()
     u = _user(data, message.from_user.id)
-
     now = time.time()
     last = float(u.get("last_slots") or 0)
     if now - last < 8:
         left = int(8 - (now - last))
         return await message.reply_text(f"⏳ Wait {left}s before next /slots.")
-
     if int(u.get("coins") or 0) < cost:
-        return await message.reply_text(
-            f"❌ Need ${cost} to play. You have ${u.get('coins', 0):,}."
-        )
-
+        return await message.reply_text(f"❌ Need ${cost} to play. You have ${u.get('coins', 0):,}.")
     spin_msg = await message.reply_text("🎰")
-
     u["coins"] = int(u["coins"]) - cost
     u["last_slots"] = now
     a, b, c, win, result = _spin_slots()
     if win > 0:
         u["coins"] = int(u["coins"]) + win
     _save(data)
-
-    frames = [
-        "🎰 Spinning...",
-        "🎰 | ❓ | ❓ | ❓ |",
-        f"🎰 | {a} | ❓ | ❓ |",
-        f"🎰 | {a} | {b} | ❓ |",
-        f"🎰 | {a} | {b} | {c} |",
-    ]
+    frames = ["🎰 Spinning...", "🎰 | ❓ | ❓ | ❓ |", f"🎰 | {a} | ❓ | ❓ |", f"🎰 | {a} | {b} | ❓ |", f"🎰 | {a} | {b} | {c} |"]
     for fr in frames:
         try:
             await spin_msg.edit_text(fr)
         except Exception:
             pass
         await asyncio.sleep(0.55)
-
     net = win - cost
-    if net > 0:
-        net_txt = f"(+${net})"
-    elif net < 0:
-        net_txt = f"(${net})"
-    else:
-        net_txt = "($0)"
-
-    final = (
-        f"🎰 | {a} | {b} | {c} |\n"
-        f"{result}\n"
-        f"💳 Bet: ${cost} {net_txt}\n"
-        f"👛 Balance: ${u['coins']:,}"
-    )
+    net_txt = f"(+${net})" if net > 0 else (f"(${net})" if net < 0 else "($0)")
+    final = f"🎰 | {a} | {b} | {c} |\n{result}\n💳 Bet: ${cost} {net_txt}\n👛 Balance: ${u['coins']:,}"
     try:
         await spin_msg.edit_text(final)
     except Exception:
@@ -993,8 +846,7 @@ async def riddle_cmd(client, message: Message):
         return
     q, a = random.choice(RIDDLES)
     await message.reply_text(
-        f"🧩 <b>Riddle</b>\n\n{q}\n\n<code>Reply with your answer!</code>\n"
-        f"(Answer: spoiler — ||{a}||)",
+        f"🧩 <b>Riddle</b>\n\n{q}\n\n<code>Reply with your answer!</code>\n(Answer: spoiler — ||{a}||)",
         parse_mode=ParseMode.HTML,
     )
 
