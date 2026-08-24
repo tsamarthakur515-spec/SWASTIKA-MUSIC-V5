@@ -18,11 +18,11 @@ except Exception:
     _DANGER = "danger"
 
 E_TITLE = "6111778259374971023"
-# /start buttons (add group, owner, support, etc.)
+# /start — SAARI buttons (help and commands bhi)
 E_START = "6147614817952735246"
-# ONLY the "help and commands" button on /start
-E_HELP_AND_CMD = "6154314112236001069"
-# Help category menu (MUSIC/TOOLS/...) + inner cmds — pehle jaisa
+# Help menu ANDAR (MUSIC, TOOLS, MODERATION, ...)
+E_HELP_INSIDE = "6154314112236001069"
+# Play / mute / andar command buttons — same as pehle
 E_CMD_BTN = "5823571441118876120"
 
 
@@ -128,6 +128,7 @@ def _back_row():
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
+    """/start — SAARI buttons purple 614761 (help and commands bhi)."""
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
@@ -153,32 +154,32 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
         [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START)],
         [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START)],
         [support_btn, update_btn],
-        # SIRF yeh button — 6154314112236001069
-        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_HELP_AND_CMD)],
+        # bhi purple — same E_START
+        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_START)],
         [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START)],
     ])
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
-    """MUSIC/TOOLS/... — purana emoji, naya wala nahi."""
+    """Help ANDAR — MUSIC/TOOLS/... = 615431."""
     return InlineKeyboardMarkup([
         [
-            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_CMD_BTN),
-            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_HELP_INSIDE),
+            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_HELP_INSIDE),
         ],
         [
-            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_CMD_BTN),
-            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_HELP_INSIDE),
+            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_HELP_INSIDE),
         ],
         [
-            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_CMD_BTN),
-            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_HELP_INSIDE),
+            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_HELP_INSIDE),
         ],
         [
-            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_HELP_INSIDE),
         ],
         [
-            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_HELP_INSIDE),
         ],
     ])
 
