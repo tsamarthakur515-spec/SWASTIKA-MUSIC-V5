@@ -589,4 +589,115 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
     ]
 
     def _run(fmt: str, extract_mp3: bool, safe_mode: bool = False):
-      
+        opts = _ytdlp_base_opts(safe_mode=safe_mode)
+        opts.update(
+            {
+                "format": fmt,
+                "outtmpl": out_tmpl,
+            }
+        )
+        if extract_mp3:
+            opts["postprocessors"] = [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ]
+        url = f"https://www.youtube.com/watch?v={vidid}"
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+
+        if os.path.exists(final_path) and os.path.getsize(final_path) > 1024:
+            return final_path
+
+        return _find_downloaded(vidid, (".mp3", ".m4a", ".webm", ".opus", ".ogg"))
+
+    try:
+        print(f"[Youtube] yt-dlp audio download for {vidid}...", flush=True)
+        last_err = None
+
+        # Pass 1: raw formats (fast — no ffmpeg convert)
+        for fmt in format_attempts:
+            for safe in (False, True):
+                try:
+                    _clean_partials(vidid)
+                    path = await asyncio.to_thread(_run, fmt, False, safe)
+                    if path:
+                        print(
+                            f"[Youtube] yt-dlp audio OK (raw) path={path} "
+                            f"size={os.path.getsize(path)} safe={safe}",
+                            flush=True,
+                        )
+                        return path
+                except Exception as e:
+                    last_err = e
+                    err = str(e)
+                    print(f"[Youtube] yt-dlp audio raw fail: {err[:180]}", flush=True)
+                    if _is_416_error(err) and not safe:
+                        print("[Youtube] 416 — retry audio in safe mode (no concurrent fragments)", flush=True)
+                        continue
+                    break
+
+        # Pass 2: extract to mp3 only if raw failed
+        for fmt in format_attempts:
+            for safe in (False, True):
+                try:
+                    _clean_partials(vidid)
+                    path = await asyncio.to_thread(_run, fmt, True, safe)
+                    if path:
+                        print(
+                            f"[Youtube] yt-dlp audio OK path={path} "
+                            f"size={os.path.getsize(path)} safe={safe}",
+                            flush=True,
+                        )
+                        return path
+                except Exception as e:
+                    last_err = e
+                    err = str(e)
+                    print(f"[Youtube] yt-dlp audio fmt fail: {err[:180]}", flush=True)
+                    if _is_416_error(err) and not safe:
+                        continue
+                    break
+
+        print(f"[Youtube] yt-dlp audio all formats failed: {last_err}", flush=True)
+        return None
+    except Exception as e:
+        print(f"[Youtube] yt-dlp audio error: {e}", flush=True)
+        return None
+    finally:
+        lock.release()
+
+
+async def download_song(vidid: str) -> Optional[str]:
+    try:
+        path = await _download_api(vidid, "audio", "mp3", 80)
+        if path:
+            return path
+
+        print(f"[Youtube] API audio failed — trying local yt-dlp for {vidid}", flush=True)
+        return await _download_ytdlp_audio(vidid)
+    except Exception as e:
+        print(f"[Youtube.download_song] {e}", flush=True)
+        return None
+
+
+async def download_video(vidid: str) -> Optional[str]:
+    """Download video: API first, then yt-dlp if API returns audio-only."""
+    try:
+        path = await _download_api(vidid, "video", "mp4", 150)
+        if path and has_video_stream(path):
+            return path
+
+        if path:
+            print(
+                "[Youtube] API returned file without video — trying yt-dlp",
+                flush=True,
+            )
+            _safe_remove(path)
+
+        path = await _download_ytdlp_video(vidid)
+        return path
+    except Exception as e:
+        print(f"[Youtube.download_video] {e}", flush=True)
+        return None
