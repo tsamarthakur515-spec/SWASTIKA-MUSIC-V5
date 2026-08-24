@@ -10,3 +10,4 @@ python-dotenv==1.0.1
 tgcrypto
 youtube-search-python
 kurigram>=2.2.6
+yt-dlp>=2024.8.6
