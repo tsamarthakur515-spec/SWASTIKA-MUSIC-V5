@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — stats.py
-# /stats — GENERAL & OVERALL buttons (real-time, this bot only)
+# /stats — GENERAL & OVERALL buttons (premium UI + custom emojis)
 # ---------------------------------------------------------------
 
 print("[stats] loading plugin...", flush=True)
@@ -37,6 +37,8 @@ from ..modules.database import (
     add_served_user,
     add_served_chat,
 )
+from ..modules.formatters import smallcaps
+from ..modules.custom_emojis import tg_emoji
 from .maintenance import block_if_maintenance
 
 try:
@@ -48,6 +50,27 @@ except Exception:
     _PRIMARY = "primary"
     _SUCCESS = "success"
     _DANGER = "danger"
+
+# User provided custom emoji IDs
+E_MUSIC   = "6222160271796871446"
+E_STAR    = "6222119723010629429"
+E_DIAMOND = "6114147788537204268"
+E_FIRE    = "6113735965598028355"
+E_CHART   = "6113675681437061434"
+E_HEADPH  = "6113641540742028885"
+E_HEART   = "6115962158816693929"
+E_STAR2   = "6113929148932034466"
+E_TROPHY  = "6113857813820216054"
+E_MUSIC2  = "6113782179446132587"
+E_CALEND  = "6159137390574178597"
+E_ROCKET  = "6125196652035711334"
+E_SPARK   = "6125056206605130177"
+E_CROWN   = "6159134001844983300"
+E_GEM     = "6172201280929273675"
+E_CHECK   = "6088909942230619591"
+E_BOLT    = "6089078549761758735"
+E_GLOW    = "6089264504665806086"
+E_WAVE    = "6089398065263810456"
 
 
 def _btn(text, style=None, **kwargs):
@@ -96,7 +119,6 @@ def _gib(bytes_val: float) -> str:
 def _count_modules() -> int:
     try:
         from ..plugins import ALL_PLUGINS
-
         return len(ALL_PLUGINS)
     except Exception:
         try:
@@ -117,7 +139,6 @@ def _count_modules() -> int:
 def _assistant_count() -> int:
     try:
         from ..modules.clients import assistants
-
         return len(assistants) or (1 if console.STRING1 else 0)
     except Exception:
         return 1 if console.STRING1 else 0
@@ -132,15 +153,17 @@ async def build_overall_text(username: str) -> str:
     duration = getattr(console, "DURATION_LIMIT", 60)
 
     return (
-        f"❖ <b>@{username}</b> sᴛᴀᴛs ᴀɴᴅ ɪɴғᴏʀᴍᴀᴛɪᴏɴ :\n\n"
-        f"ᴀssɪsᴛᴀɴᴛs : <code>{assistants_n}</code>\n"
-        f"ʙʟᴏᴄᴋᴇᴅ : <code>0</code>\n"
-        f"ᴄʜᴀᴛs: <code>{chats}</code>\n"
-        f"ᴜsᴇʀs : <code>{users}</code>\n"
-        f"ᴍᴏᴅᴜʟᴇs : <code>{modules}</code>\n"
-        f"sᴜᴅᴏᴇʀs : <code>{sudos}</code>\n\n"
-        f"ᴀᴜᴛᴏ ʟᴇᴀᴠɪɴɢ ᴀssɪsᴛᴀɴᴛ : <code>False</code>\n"
-        f"ᴘʟᴀʏ ᴅᴜʀᴀᴛɪᴏɴ ʟɪᴍɪᴛ : <code>{duration}</code> ᴍɪɴᴜᴛᴇs"
+        f"{tg_emoji(E_CROWN, '👑')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
+        f"{tg_emoji(E_STAR, '⭐')} <b>@{username}</b> — {smallcaps('overall stats')}\n\n"
+        f"{tg_emoji(E_DIAMOND, '💎')} {smallcaps('assistants')} : <code>{assistants_n}</code>\n"
+        f"{tg_emoji(E_FIRE, '🔥')} {smallcaps('blocked')} : <code>0</code>\n"
+        f"{tg_emoji(E_CHART, '📈')} {smallcaps('chats')} : <code>{chats}</code>\n"
+        f"{tg_emoji(E_HEADPH, '🎧')} {smallcaps('users')} : <code>{users}</code>\n"
+        f"{tg_emoji(E_SPARK, '✨')} {smallcaps('modules')} : <code>{modules}</code>\n"
+        f"{tg_emoji(E_TROPHY, '🏆')} {smallcaps('sudoers')} : <code>{sudos}</code>\n\n"
+        f"{tg_emoji(E_BOLT, '⚡')} {smallcaps('auto leaving assistant')} : <code>False</code>\n"
+        f"{tg_emoji(E_CALEND, '📅')} {smallcaps('play duration limit')} : <code>{duration}</code> {smallcaps('minutes')}\n\n"
+        f"{tg_emoji(E_WAVE, '🌊')} <i>{smallcaps('powered by swastika music')}</i>"
     )
 
 
@@ -174,27 +197,29 @@ async def build_general_text(username: str) -> str:
     storage_left = _gib(du.free)
 
     return (
-        f"❖ <b>@{username}</b> sᴛᴀᴛs ᴀɴᴅ ɪɴғᴏʀᴍᴀᴛɪᴏɴ :\n\n"
-        f"❖ ᴍᴏᴅᴜʟᴇs : <code>{modules}</code>\n"
-        f"ᴘʟᴀᴛғᴏʀᴍ : <code>{plat}</code>\n"
-        f"ʀᴀᴍ : <code>{ram}</code>\n"
-        f"ᴘʜʏsɪᴄᴀʟ ᴄᴏʀᴇs : <code>{physical}</code>\n"
-        f"ᴛᴏᴛᴀʟ ᴄᴏʀᴇs : <code>{total_cores}</code>\n"
-        f"ᴄᴘᴜ ғʀᴇǫᴜᴇɴᴄʏ : <code>{cpu_mhz}</code>\n\n"
-        f"ᴘʏᴛʜᴏɴ : <code>{py_ver}</code>\n"
-        f"ᴘʏʀᴏɢʀᴀᴍ : <code>{pyro_ver}</code>\n"
-        f"ᴘʏ-ᴛɢᴄᴀʟʟs : <code>{pytg_ver}</code>\n\n"
-        f"sᴛᴏʀᴀɢᴇ ᴀᴠᴀɪʟᴀʙʟᴇ : <code>{storage_avail}</code> ɢɪʙ\n"
-        f"sᴛᴏʀᴀɢᴇ ᴜsᴇᴅ : <code>{storage_used}</code> ɢɪʙ\n"
-        f"sᴛᴏʀᴀɢᴇ ʟᴇғᴛ : <code>{storage_left}</code> ɢɪʙ\n\n"
-        f"sᴇʀᴠᴇᴅ ᴄʜᴀᴛs : <code>{chats}</code>\n"
-        f"sᴇʀᴠᴇᴅ ᴜsᴇʀs : <code>{users}</code>\n"
-        f"ʙʟᴏᴄᴋᴇᴅ ᴜsᴇʀs : <code>0</code>\n"
-        f"sᴜᴅᴏ ᴜsᴇʀs : <code>{sudos}</code>\n\n"
-        f"ᴛᴏᴛᴀʟ ᴅʙ sɪᴢᴇ : <code>N/A</code> ᴍʙ\n"
-        f"ᴛᴏᴛᴀʟ ᴅʙ sᴛᴏʀᴀɢᴇ : <code>N/A</code> ᴍʙ\n"
-        f"ᴛᴏᴛᴀʟ ᴅʙ ᴄᴏʟʟᴇᴄᴛɪᴏɴs : <code>N/A</code>\n"
-        f"ᴛᴏᴛᴀʟ ᴅʙ ᴋᴇʏs : <code>N/A</code>"
+        f"{tg_emoji(E_MUSIC, '🎵')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
+        f"{tg_emoji(E_STAR2, '⭐')} <b>@{username}</b> — {smallcaps('general stats')}\n\n"
+        f"{tg_emoji(E_GEM, '💠')} <b>{smallcaps('system info')}</b>\n"
+        f"{tg_emoji(E_CHECK, '✅')} {smallcaps('modules')} : <code>{modules}</code>\n"
+        f"{tg_emoji(E_BOLT, '⚡')} {smallcaps('platform')} : <code>{plat}</code>\n"
+        f"{tg_emoji(E_DIAMOND, '💎')} {smallcaps('ram')} : <code>{ram}</code>\n"
+        f"{tg_emoji(E_FIRE, '🔥')} {smallcaps('physical cores')} : <code>{physical}</code>\n"
+        f"{tg_emoji(E_ROCKET, '🚀')} {smallcaps('total cores')} : <code>{total_cores}</code>\n"
+        f"{tg_emoji(E_GLOW, '✨')} {smallcaps('cpu frequency')} : <code>{cpu_mhz}</code>\n\n"
+        f"{tg_emoji(E_SPARK, '🌟')} <b>{smallcaps('software')}</b>\n"
+        f"{tg_emoji(E_CHECK, '✅')} {smallcaps('python')} : <code>{py_ver}</code>\n"
+        f"{tg_emoji(E_CHECK, '✅')} {smallcaps('pyrogram')} : <code>{pyro_ver}</code>\n"
+        f"{tg_emoji(E_CHECK, '✅')} {smallcaps('py-tgcalls')} : <code>{pytg_ver}</code>\n\n"
+        f"{tg_emoji(E_CHART, '📊')} <b>{smallcaps('storage')}</b>\n"
+        f"{tg_emoji(E_DIAMOND, '💎')} {smallcaps('available')} : <code>{storage_avail}</code> GiB\n"
+        f"{tg_emoji(E_FIRE, '🔥')} {smallcaps('used')} : <code>{storage_used}</code> GiB\n"
+        f"{tg_emoji(E_HEART, '❤️')} {smallcaps('left')} : <code>{storage_left}</code> GiB\n\n"
+        f"{tg_emoji(E_TROPHY, '🏆')} <b>{smallcaps('bot stats')}</b>\n"
+        f"{tg_emoji(E_HEADPH, '🎧')} {smallcaps('served chats')} : <code>{chats}</code>\n"
+        f"{tg_emoji(E_MUSIC2, '🎶')} {smallcaps('served users')} : <code>{users}</code>\n"
+        f"{tg_emoji(E_FIRE, '🔥')} {smallcaps('blocked users')} : <code>0</code>\n"
+        f"{tg_emoji(E_CROWN, '👑')} {smallcaps('sudo users')} : <code>{sudos}</code>\n\n"
+        f"{tg_emoji(E_WAVE, '🌊')} <i>{smallcaps('powered by swastika music')}</i>"
     )
 
 
@@ -217,13 +242,13 @@ async def stats_cmd(client, message: Message):
         pass
 
     me = client.me or await client.get_me()
-    uname = me.username or "SwastikaMusic"
+    uname = me.username or "Swastika_musics_bot"
 
     photo = getattr(console, "STATS_IMAGE_URL", None)
     caption = (
-        f"❖ <b>CLICK ON THE BUTTONS</b>\n"
+        f"{tg_emoji(E_MUSIC, '🎵')} <b>CLICK ON THE BUTTONS</b>\n"
         f"<b>BELOW TO CHECK THE STATS OF</b>\n"
-        f"<b>@{uname}</b>"
+        f"{tg_emoji(E_STAR, '⭐')} <b>@{uname}</b>"
     )
     markup = stats_home_markup()
 
@@ -249,7 +274,7 @@ async def stats_cmd(client, message: Message):
 async def stats_overall_cb(client, query):
     try:
         me = client.me or await client.get_me()
-        uname = me.username or "SwastikaMusic"
+        uname = me.username or "Swastika_musics_bot"
         text = await build_overall_text(uname)
         try:
             await query.message.edit_caption(
@@ -268,7 +293,7 @@ async def stats_overall_cb(client, query):
 async def stats_general_cb(client, query):
     try:
         me = client.me or await client.get_me()
-        uname = me.username or "SwastikaMusic"
+        uname = me.username or "Swastika_musics_bot"
         text = await build_general_text(uname)
         try:
             await query.message.edit_caption(
