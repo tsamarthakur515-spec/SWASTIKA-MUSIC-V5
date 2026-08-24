@@ -21,6 +21,8 @@ except Exception:
 E_TITLE = "6111778259374971023"
 # All start menu buttons emoji
 E_BTN_ALL = "6147614817952735246"
+# Help menu category buttons emoji
+E_HELP_BTN = "6124939873120949412"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -211,22 +213,22 @@ def help_menu_markup() -> InlineKeyboardMarkup:
     """Main help: category buttons only — 2 per row."""
     return InlineKeyboardMarkup([
         [
-            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E.LIGHTNING),
-            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E.GEAR),
+            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_HELP_BTN),
+            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_HELP_BTN),
         ],
         [
-            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E.FIRE),
-            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E.LIGHTNING),
+            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_HELP_BTN),
+            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_HELP_BTN),
         ],
         [
-            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E.GEAR),
-            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E.PARTY),
+            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_HELP_BTN),
+            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_HELP_BTN),
         ],
         [
-            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E.BUTTERFLY),
+            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_HELP_BTN),
         ],
         [
-            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E.ARROW2),
+            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_HELP_BTN),
         ],
     ])
 
