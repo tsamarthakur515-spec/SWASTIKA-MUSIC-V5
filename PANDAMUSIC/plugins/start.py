@@ -20,7 +20,7 @@ except Exception:
 # Title emoji for welcome
 E_TITLE = "6111778259374971023"
 # All start menu buttons emoji
-E_BTN_ALL = "6111504695728020416"
+E_BTN_ALL = "6147614817952735246"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
