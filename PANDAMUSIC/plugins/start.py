@@ -17,21 +17,15 @@ except Exception:
     _SUCCESS = "success"
     _DANGER = "danger"
 
-# Title emoji for welcome
+# Title emoji for welcome caption
 E_TITLE = "6111778259374971023"
-# User-requested premium emoji for ALL buttons
-E_PREMIUM = "5823571441118876120"
-# All start menu buttons emoji
-E_BTN_ALL = E_PREMIUM
-# Help menu category buttons emoji
-E_HELP_BTN = E_PREMIUM
-# Inner command buttons emoji (play, stats, mute, etc.)
-E_CMD_BTN = E_PREMIUM
+# ONLY /start + /help (category) menus
+E_START_HELP = "6147614817952735246"
+# Inner command buttons (play, mute, etc.) — unchanged
+E_CMD_BTN = "5823571441118876120"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
-    # Always attach premium emoji icon if not already set
-    kwargs.setdefault("icon_custom_emoji_id", E_PREMIUM)
     if style is not None:
         try:
             return InlineKeyboardButton(text, style=style, **kwargs)
@@ -48,7 +42,6 @@ def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
         return InlineKeyboardButton(text, **kwargs)
 
 
-# Full admin rights when user adds bot to a group via start menu button
 ADD_GROUP_ADMIN = (
     "delete_messages+manage_video_chats+pin_messages+"
     "invite_users+ban_users+change_info+promote_members"
@@ -56,12 +49,9 @@ ADD_GROUP_ADMIN = (
 
 
 def add_group_url(bot_username: str) -> str:
-    return (
-        f"https://t.me/{bot_username}?startgroup=s&admin={ADD_GROUP_ADMIN}"
-    )
+    return f"https://t.me/{bot_username}?startgroup=s&admin={ADD_GROUP_ADMIN}"
 
 
-# ── Command lists by category ─────────────────────────────────
 MUSIC_COMMANDS = [
     ("play", "/play"), ("vplay", "/vplay"), ("pause", "/pause"),
     ("resume", "/resume"), ("skip", "/skip"), ("end", "/end"),
@@ -117,12 +107,12 @@ CMD_USAGE = {
 
 
 def _cmd_rows(commands, per_row=2):
-    """Build command buttons, 2 per row — all use E_PREMIUM."""
+    """Inner command buttons — E_CMD_BTN only (not start/help emoji)."""
     rows, row, styles = [], [], [_PRIMARY, _SUCCESS, _DANGER]
     for i, (key, _label) in enumerate(commands):
         kw = {
             "callback_data": f"cmdhelp|{key}",
-            "icon_custom_emoji_id": E_PREMIUM,
+            "icon_custom_emoji_id": E_CMD_BTN,
         }
         row.append(_btn(smallcaps(key), styles[i % 3], **kw))
         if len(row) == per_row:
@@ -135,72 +125,63 @@ def _cmd_rows(commands, per_row=2):
 
 def _back_row():
     return [
-        _btn(smallcaps("COMMANDS"), _SUCCESS, callback_data="help_menu", icon_custom_emoji_id=E_PREMIUM),
-        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_PREMIUM),
+        _btn(smallcaps("COMMANDS"), _SUCCESS, callback_data="help_menu", icon_custom_emoji_id=E_CMD_BTN),
+        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
     ]
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
+    """/start menu — ONLY E_START_HELP emoji."""
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
     if owner:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E_PREMIUM)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E_START_HELP)
     elif getattr(console, "OWNER_ID", 0):
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E_PREMIUM)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E_START_HELP)
     else:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E_PREMIUM)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E_START_HELP)
     if support:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E_PREMIUM)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E_START_HELP)
     else:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E_PREMIUM)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E_START_HELP)
     if channel:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E_PREMIUM)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E_START_HELP)
     else:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E_PREMIUM)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E_START_HELP)
 
     add_url = add_group_url(bot_username)
 
     return InlineKeyboardMarkup([
-        [_btn(
-            smallcaps("➕ add me in your group ➕"),
-            _PRIMARY,
-            url=add_url,
-            icon_custom_emoji_id=E_PREMIUM,
-        )],
-        [_btn(
-            "🎵 #MUSIC BOT",
-            _SUCCESS,
-            url=add_url,
-            icon_custom_emoji_id=E_PREMIUM,
-        )],
-        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_PREMIUM)],
+        [_btn(smallcaps("➕ add me in your group ➕"), _PRIMARY, url=add_url, icon_custom_emoji_id=E_START_HELP)],
+        [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START_HELP)],
+        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START_HELP)],
         [support_btn, update_btn],
-        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_PREMIUM)],
-        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_PREMIUM)],
+        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_START_HELP)],
+        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START_HELP)],
     ])
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
-    """Main help: category buttons only — 2 per row."""
+    """/help category menu — ONLY E_START_HELP emoji."""
     return InlineKeyboardMarkup([
         [
-            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_PREMIUM),
-            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_PREMIUM),
+            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_START_HELP),
         ],
         [
-            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_PREMIUM),
-            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_PREMIUM),
+            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_START_HELP),
         ],
         [
-            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_PREMIUM),
-            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_PREMIUM),
+            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_START_HELP),
         ],
         [
-            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_PREMIUM),
+            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_START_HELP),
         ],
         [
-            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_PREMIUM),
+            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_START_HELP),
         ],
     ])
 
@@ -247,7 +228,7 @@ def cmd_help_markup() -> InlineKeyboardMarkup:
 
 def about_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_PREMIUM),
+        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
     ]])
 
 
@@ -273,23 +254,23 @@ def help_list_caption() -> str:
         f"• games — economy rpg social\n"
         f"• fun — couple riddle dice slots coinflip"
     )
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {body}</blockquote>"
 
 
 def music_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {smallcaps('music commands')}\n\n{smallcaps('audio and video streaming controls.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.LIGHTNING}'>⚡</tg-emoji> {smallcaps('music commands')}\n\n{smallcaps('audio and video streaming controls.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def tools_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {smallcaps('tools')}\n\n{smallcaps('stats, active chats, welcome and broadcast.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {smallcaps('tools')}\n\n{smallcaps('stats, active chats, welcome and broadcast.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def moderation_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {smallcaps('moderation')}\n\n{smallcaps('mute ban kick tagall and abuse filter.')}\n{smallcaps('admin only for most commands.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.FIRE}'>🔥</tg-emoji> {smallcaps('moderation')}\n\n{smallcaps('mute ban kick tagall and abuse filter.')}\n{smallcaps('admin only for most commands.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def chatbot_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {smallcaps('chatbot commands')}\n\n{smallcaps('enable or disable ai chat in this chat.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.LIGHTNING}'>⚡</tg-emoji> {smallcaps('chatbot commands')}\n\n{smallcaps('enable or disable ai chat in this chat.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def locks_list_caption() -> str:
@@ -303,20 +284,20 @@ def locks_list_caption() -> str:
         f"invitelink phone email emoji media\n\n"
         f"{smallcaps('admin owner sudo only. bot needs delete messages right.')}"
     )
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {body}</blockquote>"
 
 
 def fun_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {smallcaps('fun')}\n\n{smallcaps('couple of the day, riddles, dice, slots and coinflip.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.BUTTERFLY}'>🦋</tg-emoji> {smallcaps('fun')}\n\n{smallcaps('couple of the day, riddles, dice, slots and coinflip.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def cmd_usage_caption(key: str) -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {CMD_USAGE.get(key, smallcaps('unknown command'))}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.STAR}'>🌟</tg-emoji> {CMD_USAGE.get(key, smallcaps('unknown command'))}</blockquote>"
 
 
 def about_caption() -> str:
     body = f"{smallcaps('about')}\n\n{smallcaps('high quality telegram music bot.')}\n{smallcaps('supports audio and video streaming.')}\n{smallcaps('powered by pytgcalls + kurigram.')}\n\n{smallcaps('add me in your group and start playing.')}"
-    return f"<blockquote expandable><tg-emoji emoji-id='{E_PREMIUM}'>⭐</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable><tg-emoji emoji-id='{E.CHECK}'>✅</tg-emoji> {body}</blockquote>"
 
 
 async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
