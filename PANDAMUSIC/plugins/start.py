@@ -1,7 +1,7 @@
 from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
 from ..modules.formatters import smallcaps
-from ..modules.custom_emojis import E
+from ..modules.custom_emojis import E, tg_emoji
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 from pyrogram.enums import ParseMode
@@ -16,6 +16,9 @@ except Exception:
     _PRIMARY = "primary"
     _SUCCESS = "success"
     _DANGER = "danger"
+
+# Title emoji for welcome
+E_TITLE = "6111778259374971023"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -272,8 +275,14 @@ def about_markup() -> InlineKeyboardMarkup:
 
 
 def start_caption(mention: str) -> str:
-    body = f"{smallcaps('hey')} {mention}\n\n{smallcaps('i am a high quality fast music bot.')}\n{smallcaps('add me to your group and enjoy audio / video streaming.')}\n\n{smallcaps('use the buttons below for help, owner and support.')}"
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.STAR}'>🌟</tg-emoji> {body}</blockquote>"
+    # Title emoji throughout the welcome message
+    return (
+        f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('hey')} {mention}\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('i am a high quality fast music bot.')}\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('add me to your group and enjoy audio / video streaming.')}\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('use the buttons below for help, owner and support.')}"
+    )
 
 
 def help_list_caption() -> str:

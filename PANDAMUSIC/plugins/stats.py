@@ -104,10 +104,10 @@ def stats_home_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("❖ GENERAL ❖", _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
-                _btn("❖ OVERALL ❖", _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
+                _btn(smallcaps("GENERAL"), _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
+                _btn(smallcaps("OVERALL"), _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
             ],
-            [_btn("CLOSE", _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
+            [_btn(smallcaps("CLOSE"), _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
         ]
     )
 
@@ -116,10 +116,10 @@ def stats_back_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("❖ GENERAL ❖", _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
-                _btn("❖ OVERALL ❖", _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
+                _btn(smallcaps("GENERAL"), _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
+                _btn(smallcaps("OVERALL"), _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
             ],
-            [_btn("CLOSE", _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
+            [_btn(smallcaps("CLOSE"), _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
         ]
     )
 
@@ -258,13 +258,13 @@ async def stats_cmd(client, message: Message):
 
     photo = getattr(console, "STATS_IMAGE_URL", None)
 
-    # Premium home caption with new title emoji
+    # Premium home caption with title emoji throughout
     caption = (
         f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n"
-        f"{tg_emoji(E_STAR, '⭐')} {smallcaps('welcome to the stats dashboard')}\n\n"
-        f"{tg_emoji(E_GLOW, '✨')} {smallcaps('tap a button below to explore')}\n"
-        f"{tg_emoji(E_ROCKET, '🚀')} {smallcaps('live system & bot statistics')}\n\n"
-        f"{tg_emoji(E_CROWN, '👑')} <b>@{uname}</b>"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('welcome to the stats dashboard')}\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('tap a button below to explore')}\n"
+        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('live system & bot statistics')}\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} <b>@{uname}</b>"
     )
     markup = stats_home_markup()
 
