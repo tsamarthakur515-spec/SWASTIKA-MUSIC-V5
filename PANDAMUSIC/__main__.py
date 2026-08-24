@@ -10,6 +10,7 @@ from .plugins import import_all_plugins
 
 
 async def main():
+    # Old session files clean
     for file in os.listdir():
         if file.endswith(".session") or file.endswith(".session-journal"):
             try:
@@ -17,9 +18,11 @@ async def main():
             except Exception:
                 pass
 
+    # Required folders
     os.makedirs("cache", exist_ok=True)
     os.makedirs("downloads", exist_ok=True)
 
+    # PostgreSQL init (optional — bot runs even if DB is missing/fails)
     try:
         await init_db()
     except Exception as e:
@@ -27,24 +30,28 @@ async def main():
             f"⚠️ Database init skipped: {e} — continuing without DB"
         )
 
+    # Load sudo users
     try:
         await console.sudo_users()
     except Exception as e:
         console.logs(__name__).error(f"❌ Sudo load failed: {e}")
         sys.exit(1)
 
+    # Start bot
     try:
         await bot.start()
     except Exception as e:
         console.logs(__name__).error(f"❌ Failed to start bot: {e}")
         sys.exit(1)
 
+    # Start assistant(s)
     try:
         await app.start()
     except Exception as e:
         console.logs(__name__).error(f"❌ Failed to start assistant: {e}")
         sys.exit(1)
 
+    # Start PyTgCalls
     try:
         await call.start()
     except Exception as e:
