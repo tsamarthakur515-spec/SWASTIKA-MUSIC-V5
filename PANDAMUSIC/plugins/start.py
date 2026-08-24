@@ -23,6 +23,8 @@ E_TITLE = "6111778259374971023"
 E_BTN_ALL = "6147614817952735246"
 # Help menu category buttons emoji
 E_HELP_BTN = "6124939873120949412"
+# Inner command buttons emoji (play, stats, etc.)
+E_CMD_BTN = "5823571441118876120"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -77,38 +79,6 @@ FUN_COMMANDS = [
     ("dice", "/dice"), ("slots", "/slots"), ("coinflip", "/coinflip"),
 ]
 
-HELP_EMOJI = {
-    "play": E.LIGHTNING,
-    "vplay": E.STAR,
-    "pause": E.HEART_BLACK,
-    "resume": E.CHECK,
-    "skip": E.ARROW,
-    "end": E.SKULL,
-    "stats": E.GEAR,
-    "active": E.SPARKLES,
-    "broadcast": E.PARTY,
-    "couple": E.BUTTERFLY,
-    "mute": E.WARNING,
-    "unmute": E.CHECK,
-    "ban": E.SKULL,
-    "unban": E.CHECK,
-    "kick": E.FIRE,
-    "tagall": E.PARTY2,
-    "welcome": E.PARTY2,
-    "setwelcome": E.CHECK,
-    "resetwelcome": E.SKULL2,
-    "noabuse": E.SKULL2,
-    "chaton": E.CHECK,
-    "chatoff": E.SKULL2,
-    "lock": E.SKULL2,
-    "unlock": E.CHECK,
-    "locks": E.GEAR,
-    "riddle": E.SPARKLES,
-    "dice": E.STAR,
-    "slots": E.PARTY,
-    "coinflip": E.LIGHTNING,
-}
-
 CMD_USAGE = {
     "play": f"{smallcaps('command')}: /play\n\n{smallcaps('use')}:\n• /play {smallcaps('song name')}\n• /play {smallcaps('youtube link')}\n• {smallcaps('reply to audio with')} /play\n\n{smallcaps('plays audio in voice chat.')}",
     "vplay": f"{smallcaps('command')}: /vplay\n\n{smallcaps('use')}:\n• /vplay {smallcaps('song name')}\n• /vplay {smallcaps('youtube link')}\n• {smallcaps('reply to video with')} /vplay\n\n{smallcaps('plays video in voice chat.')}",
@@ -143,13 +113,13 @@ CMD_USAGE = {
 
 
 def _cmd_rows(commands, per_row=2):
-    """Build command buttons, 2 per row."""
+    """Build command buttons, 2 per row — all use E_CMD_BTN."""
     rows, row, styles = [], [], [_PRIMARY, _SUCCESS, _DANGER]
     for i, (key, _label) in enumerate(commands):
-        eid = HELP_EMOJI.get(key)
-        kw = {"callback_data": f"cmdhelp|{key}"}
-        if eid:
-            kw["icon_custom_emoji_id"] = eid
+        kw = {
+            "callback_data": f"cmdhelp|{key}",
+            "icon_custom_emoji_id": E_CMD_BTN,
+        }
         row.append(_btn(smallcaps(key), styles[i % 3], **kw))
         if len(row) == per_row:
             rows.append(row)
@@ -161,8 +131,8 @@ def _cmd_rows(commands, per_row=2):
 
 def _back_row():
     return [
-        _btn(smallcaps("COMMANDS"), _SUCCESS, callback_data="help_menu", icon_custom_emoji_id=E.GEAR),
-        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E.ARROW2),
+        _btn(smallcaps("COMMANDS"), _SUCCESS, callback_data="help_menu", icon_custom_emoji_id=E_CMD_BTN),
+        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
     ]
 
 
@@ -275,7 +245,7 @@ def cmd_help_markup() -> InlineKeyboardMarkup:
 
 def about_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E.ARROW2),
+        _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
     ]])
 
 
