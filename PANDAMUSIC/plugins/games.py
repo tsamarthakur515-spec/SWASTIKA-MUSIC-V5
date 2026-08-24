@@ -22,6 +22,9 @@ _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 _DB = os.path.join(_BASE, "games_db.json")
 _RNG = secrets.SystemRandom()
 
+# Games menu buttons emoji (same as help menu inside)
+E_GAMES = "6154314112236001069"
+
 SHOP = {
     "sword": {"price": 1500, "name": "🗡️ Sword", "atk": 15, "slot": "weapon"},
     "shield": {"price": 1200, "name": "🛡️ Shield", "def": 12, "slot": "armor"},
@@ -186,22 +189,27 @@ async def _target_user(client, message: Message):
 
 
 def _btn(text, **kwargs):
-    return InlineKeyboardButton(text, **kwargs)
+    kwargs.setdefault("icon_custom_emoji_id", E_GAMES)
+    try:
+        return InlineKeyboardButton(text, **kwargs)
+    except TypeError:
+        kwargs.pop("icon_custom_emoji_id", None)
+        return InlineKeyboardButton(text, **kwargs)
 
 
 def games_menu_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("💍 Social", callback_data="games_social"),
-                _btn("💰 Economy", callback_data="games_economy"),
+                _btn("Social", callback_data="games_social"),
+                _btn("Economy", callback_data="games_economy"),
             ],
             [
-                _btn("⚔️ RPG", callback_data="games_rpg"),
-                _btn("🧠 AI & Fun", callback_data="games_fun"),
+                _btn("RPG", callback_data="games_rpg"),
+                _btn("AI & Fun", callback_data="games_fun"),
             ],
             [
-                _btn("⬅️ Back", callback_data="help_menu"),
+                _btn("Back", callback_data="help_menu"),
             ],
         ]
     )
@@ -211,8 +219,8 @@ def games_back_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("🎮 Games", callback_data="games_menu"),
-                _btn("⬅️ Help", callback_data="help_menu"),
+                _btn("Games", callback_data="games_menu"),
+                _btn("Help", callback_data="help_menu"),
             ]
         ]
     )
