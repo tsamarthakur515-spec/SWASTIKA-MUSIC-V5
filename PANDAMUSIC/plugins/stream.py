@@ -539,139 +539,147 @@ def _friendly_stream_error(e: Exception) -> str:
 
 
 async def _resolve_playable(Youtube, info, is_video: bool):
+    """Cache first, then full download. Direct CDN URLs are unreliable with pytgcalls."""
     vidid = info.get("vidid")
     cached = Youtube.cached_file(vidid, is_video)
     if cached:
         print(f"[stream] cache hit {cached}", flush=True)
-        return cached, False
-    try:
-        direct = await Youtube.get_direct_url(vidid, is_video)
-    except Exception as e:
-        print(f"[stream] direct url error: {e}", flush=True)
-        direct = None
-    if direct:
-        return direct, True
+        return cached
     if is_video:
         path = await Youtube.download_video(vidid)
     else:
         path = await Youtube.download_song(vidid)
-    return path, False
+    return path
 
 
 @bot.on_message(cdz(["play", "vplay"]) & ~filters.private)
 async def start_stream_in_vc(client, message):
     if await block_if_maintenance(message):
         return
+
     from ..platforms import Youtube
     from .callbacks import player_markup, queue_markup, start_progress_task
+
     chat_id = message.chat.id
     mention = message.from_user.mention if message.from_user else "User"
     is_video = message.command[0].lower() == "vplay"
     reply = message.reply_to_message
     has_text_query = len(message.command) >= 2
-    try:
-        await message.delete()
-    except Exception:
-        pass
+
     if not has_text_query and not _reply_has_playable(reply, is_video):
         return await message.reply_text(
             f"Usage:\n• <code>/{message.command[0]} song name</code>\n• Reply to audio/video with <code>/{message.command[0]}</code>",
             parse_mode=ParseMode.HTML,
         )
+
+    # Status FIRST so user always sees feedback (delete can fail silently later)
     aux = await message.reply_text(
         f"{tg_emoji(E.LOADER, '*')} {smallcaps('getting your query baby...')}",
         parse_mode=ParseMode.HTML,
     )
+
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
     info = None
     file_path = None
     query = ""
-    used_direct = False
     thumb_task = None
-    if not has_text_query and _reply_has_playable(reply, is_video):
-        await _status(aux, "getting your query baby...", E.SPIRAL)
-        tg = await _download_replied_media(message, is_video)
-        if not tg:
-            return await aux.edit("Media download fail. Audio/video pe reply karke try karo.")
-        file_path = tg["file_path"]
-        info = tg
-        query = tg["title"]
-        if is_video:
-            has_vid = await asyncio.get_event_loop().run_in_executor(None, file_has_video, file_path)
-            if not has_vid:
-                return await aux.edit("Is file me video stream nahi hai. /play use karo audio ke liye.")
-        print(f"[stream] reply-media path={file_path} video={is_video} title={info['title']}", flush=True)
-    else:
-        query = " ".join(message.command[1:])
-        await _status(aux, "searching baby...", E.SPIRAL)
-        try:
-            info = await Youtube.search(query)
-        except Exception as e:
-            return await aux.edit(f"Search error: {e}")
-        if not info:
-            return await aux.edit("Song not found.")
-        thumb_task = asyncio.create_task(
-            generate_player_thumbnail(
-                info.get("thumbnail", ""),
-                info.get("title", "Unknown"),
-                info.get("channel") or info.get("uploader") or "YouTube Music",
-                info.get("duration_min", "0:00"),
+
+    try:
+        if not has_text_query and _reply_has_playable(reply, is_video):
+            await _status(aux, "getting your query baby...", E.SPIRAL)
+            tg = await _download_replied_media(message, is_video)
+            if not tg:
+                return await aux.edit("Media download fail. Audio/video pe reply karke try karo.")
+            file_path = tg["file_path"]
+            info = tg
+            query = tg["title"]
+            if is_video:
+                has_vid = await asyncio.get_event_loop().run_in_executor(None, file_has_video, file_path)
+                if not has_vid:
+                    return await aux.edit("Is file me video stream nahi hai. /play use karo audio ke liye.")
+            print(f"[stream] reply-media path={file_path} video={is_video} title={info['title']}", flush=True)
+        else:
+            query = " ".join(message.command[1:])
+            await _status(aux, "searching baby...", E.SPIRAL)
+            try:
+                info = await Youtube.search(query)
+            except Exception as e:
+                return await aux.edit(f"Search error: {e}")
+            if not info:
+                return await aux.edit("Song not found.")
+
+            thumb_task = asyncio.create_task(
+                generate_player_thumbnail(
+                    info.get("thumbnail", ""),
+                    info.get("title", "Unknown"),
+                    info.get("channel") or info.get("uploader") or "YouTube Music",
+                    info.get("duration_min", "0:00"),
+                )
             )
-        )
-        await _status(aux, "preparing stream baby...", E.LOADER)
-        try:
-            file_path, used_direct = await _resolve_playable(Youtube, info, is_video)
-        except Exception as e:
-            return await aux.edit(f"Download error: {e}")
-        if not file_path:
-            return await aux.edit("Download failed - API se file nahi mili.")
-        if not _is_remote_path(file_path):
+
+            await _status(aux, f"downloading {'video' if is_video else 'audio'} baby...", E.LOADER)
+            try:
+                file_path = await _resolve_playable(Youtube, info, is_video)
+            except Exception as e:
+                print(f"[stream] resolve error: {e}", flush=True)
+                return await aux.edit(f"Download error: {e}")
+
+            if not file_path:
+                return await aux.edit("Download failed. API ya yt-dlp se file nahi mili.")
+
             try:
                 size = os.path.getsize(file_path)
             except Exception:
                 size = 0
             if is_video:
                 has_vid = await asyncio.get_event_loop().run_in_executor(None, file_has_video, file_path)
-                print(f"[stream] vplay path={file_path} size={size} has_video_stream={has_vid}", flush=True)
+                print(f"[stream] vplay path={file_path} size={size} has_video={has_vid}", flush=True)
                 if not has_vid:
                     return await aux.edit("Downloaded file mein video stream nahi hai.")
             else:
                 print(f"[stream] play path={file_path} size={size}", flush=True)
-        else:
-            print(f"[stream] direct url video={is_video} title={info.get('title')}", flush=True)
-    try:
-        media_stream = build_media_stream(file_path, is_video)
-    except Exception as e:
-        return await aux.edit(f"MediaStream error: {e}")
-    already_playing = chat_id in getattr(call, "active_chats", [])
-    if already_playing:
-        try:
-            pos = await call.add_to_queue(
-                chat_id, media_stream, info["title"], info.get("duration_min", "0:00"),
-                info.get("thumbnail", ""), mention, file_path=file_path, is_video=is_video,
-            )
-            text = queue_caption(pos, info["title"], info.get("duration_min", "0:00"), mention)
-            buttons = queue_markup(chat_id, pos)
-            await aux.edit(text, reply_markup=buttons, parse_mode=ParseMode.HTML)
-            await _send_play_log(message, query, info.get("title") or query, is_video, queued=True)
-        except Exception as e:
-            await aux.edit(f"Queue error: {e}")
-        return
-    await _status(aux, "starting stream baby...", E.FIRE_PURPLE)
-    if thumb_task is None:
-        thumb_task = asyncio.create_task(
-            generate_player_thumbnail(
-                info.get("thumbnail", ""),
-                info.get("title", "Unknown"),
-                info.get("channel") or info.get("uploader") or "YouTube Music",
-                info.get("duration_min", "0:00"),
-            )
-        )
 
-    async def _start_with(path, stream):
+        try:
+            media_stream = build_media_stream(file_path, is_video)
+        except Exception as e:
+            return await aux.edit(f"MediaStream error: {e}")
+
+        already_playing = chat_id in getattr(call, "active_chats", [])
+
+        if already_playing:
+            try:
+                pos = await call.add_to_queue(
+                    chat_id, media_stream, info["title"], info.get("duration_min", "0:00"),
+                    info.get("thumbnail", ""), mention, file_path=file_path, is_video=is_video,
+                )
+                text = queue_caption(pos, info["title"], info.get("duration_min", "0:00"), mention)
+                buttons = queue_markup(chat_id, pos)
+                await aux.edit(text, reply_markup=buttons, parse_mode=ParseMode.HTML)
+                await _send_play_log(message, query, info.get("title") or query, is_video, queued=True)
+            except Exception as e:
+                await aux.edit(f"Queue error: {e}")
+            return
+
+        await _status(aux, "starting stream baby...", E.FIRE_PURPLE)
+
+        if thumb_task is None:
+            thumb_task = asyncio.create_task(
+                generate_player_thumbnail(
+                    info.get("thumbnail", ""),
+                    info.get("title", "Unknown"),
+                    info.get("channel") or info.get("uploader") or "YouTube Music",
+                    info.get("duration_min", "0:00"),
+                )
+            )
+
         call.queue[chat_id] = []
         await call.add_to_queue(
-            chat_id, stream, info["title"], info.get("duration_min", "0:00"),
-            info.get("thumbnail", ""), mention, file_path=path, is_video=is_video,
+            chat_id, media_stream, info["title"], info.get("duration_min", "0:00"),
+            info.get("thumbnail", ""), mention, file_path=file_path, is_video=is_video,
         )
         if not hasattr(call, "start_times"):
             call.start_times = {}
@@ -680,73 +688,61 @@ async def start_stream_in_vc(client, message):
             await call.stream_on(chat_id)
         except Exception:
             call.paused[chat_id] = False
-        await call.start_stream(chat_id, stream)
 
-    try:
-        await _start_with(file_path, media_stream)
-    except AssistantErr as e:
-        if used_direct:
-            print(f"[start_stream] direct failed, downloading fallback: {e}", flush=True)
-            await _status(aux, "downloading audio baby...", E.LOADER)
-            try:
-                await _reset_failed_play(chat_id)
-                file_path = await (Youtube.download_video(info["vidid"]) if is_video else Youtube.download_song(info["vidid"]))
-                if not file_path:
-                    raise e
-                media_stream = build_media_stream(file_path, is_video)
-                await _start_with(file_path, media_stream)
-            except AssistantErr as e2:
+        try:
+            await call.start_stream(chat_id, media_stream)
+        except AssistantErr as e:
+            if thumb_task:
                 thumb_task.cancel()
-                await _reset_failed_play(chat_id)
-                return await aux.edit(_friendly_stream_error(e2) if "admin" in str(e2).lower() or "channel" in str(e2).lower() else str(e2))
-            except Exception as e2:
-                thumb_task.cancel()
-                await _reset_failed_play(chat_id)
-                return await aux.edit(_friendly_stream_error(e2))
-        else:
-            thumb_task.cancel()
             await _reset_failed_play(chat_id)
-            return await aux.edit(_friendly_stream_error(e) if "admin" in str(e).lower() or "channel" in str(e).lower() else str(e))
-    except Exception as e:
-        if used_direct:
-            print(f"[start_stream] direct failed, downloading fallback: {e}", flush=True)
-            await _status(aux, "downloading audio baby...", E.LOADER)
-            try:
-                await _reset_failed_play(chat_id)
-                file_path = await (Youtube.download_video(info["vidid"]) if is_video else Youtube.download_song(info["vidid"]))
-                if not file_path:
-                    raise e
-                media_stream = build_media_stream(file_path, is_video)
-                await _start_with(file_path, media_stream)
-            except Exception as e2:
+            return await aux.edit(
+                _friendly_stream_error(e)
+                if "admin" in str(e).lower() or "channel" in str(e).lower()
+                else str(e)
+            )
+        except Exception as e:
+            if thumb_task:
                 thumb_task.cancel()
-                await _reset_failed_play(chat_id)
-                print(f"[start_stream fail] {e2}", flush=True)
-                return await aux.edit(_friendly_stream_error(e2))
-        else:
-            thumb_task.cancel()
             await _reset_failed_play(chat_id)
             print(f"[start_stream fail] {e}", flush=True)
             return await aux.edit(_friendly_stream_error(e))
-    await _send_play_log(message, query, info.get("title") or query, is_video, queued=False)
-    try:
+
+        await _send_play_log(message, query, info.get("title") or query, is_video, queued=False)
+
         try:
-            thumb = await thumb_task
-        except Exception:
-            thumb = ""
-        caption = panel_caption(info["title"], info.get("duration_min", "0:00"), mention, header="STREAMING IN VC" + (" (VIDEO)" if is_video else ""))
-        total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
-        buttons = player_markup(chat_id, 0, total_sec)
-        await aux.delete()
-        if thumb and os.path.isfile(thumb):
-            panel = await message.reply_photo(photo=thumb, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
-        else:
-            panel = await message.reply_text(caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
-        if chat_id in call.queue and call.queue[chat_id]:
-            call.queue[chat_id][0]["panel"] = panel
-            call.queue[chat_id][0]["played"] = 0
-            call.queue[chat_id][0]["file_path"] = file_path
-            call.queue[chat_id][0]["is_video"] = is_video
-        start_progress_task(chat_id)
+            try:
+                thumb = await thumb_task if thumb_task else ""
+            except Exception:
+                thumb = ""
+            caption = panel_caption(
+                info["title"],
+                info.get("duration_min", "0:00"),
+                mention,
+                header="STREAMING IN VC" + (" (VIDEO)" if is_video else ""),
+            )
+            total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
+            buttons = player_markup(chat_id, 0, total_sec)
+            await aux.delete()
+            if thumb and os.path.isfile(thumb):
+                panel = await message.reply_photo(
+                    photo=thumb, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML
+                )
+            else:
+                panel = await message.reply_text(
+                    caption, reply_markup=buttons, parse_mode=ParseMode.HTML
+                )
+            if chat_id in call.queue and call.queue[chat_id]:
+                call.queue[chat_id][0]["panel"] = panel
+                call.queue[chat_id][0]["played"] = 0
+                call.queue[chat_id][0]["file_path"] = file_path
+                call.queue[chat_id][0]["is_video"] = is_video
+            start_progress_task(chat_id)
+        except Exception as e:
+            print(f"[PANEL ERROR] {e}", flush=True)
+
     except Exception as e:
-        print(f"[PANEL ERROR] {e}", flush=True)
+        print(f"[play handler crash] {e}", flush=True)
+        try:
+            await aux.edit(f"Error: {type(e).__name__}: {e}")
+        except Exception:
+            pass
