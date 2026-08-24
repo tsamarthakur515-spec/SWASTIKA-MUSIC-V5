@@ -55,6 +55,7 @@ chat_admins = {}
 chat_links = {}
 sudoers = filters.user()
 
+# Load Config.env from CWD and from package parent (more reliable on VPS)
 _here = os.path.dirname(os.path.abspath(__file__))
 _root = os.path.dirname(_here)
 for _cfg in (
@@ -85,6 +86,7 @@ try:
     SHRUTI_API_URL = _env_str("SHRUTI_API_URL", "https://aruyt.up.railway.app") or "https://aruyt.up.railway.app"
     SHRUTI_API_KEY = _env_str("SHRUTI_API_KEY", "")
 
+    # Groq chatbot API — default model that works on current Groq keys
     GROQ_API_KEY = _env_str("GROQ_API_KEY", "") or ""
     GROQ_API_BASE = _env_str("GROQ_API_BASE", "https://api.groq.com/openai/v1") or "https://api.groq.com/openai/v1"
     GROQ_MODEL = _env_str("GROQ_MODEL", "openai/gpt-oss-20b") or "openai/gpt-oss-20b"
