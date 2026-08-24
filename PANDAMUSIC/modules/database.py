@@ -9,10 +9,12 @@ Isse ek hi Supabase DB pe dono bots ke data bilkul alag rahenge.
 
 DB OPTIONAL: agar DB_HOST/DB_USER missing ho ya connection fail ho,
 to bot bina DB ke bhi chalega (in-memory fallback).
+Served users/chats always tracked in-memory too so broadcast works
+even when DB is down or tables are still empty this session.
 """
 
 import random
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import asyncpg
 
@@ -22,6 +24,10 @@ log = console.logs(__name__)
 
 _pool: Optional[asyncpg.Pool] = None
 assistantdict = {}
+
+# In-memory fallback (and session cache) — broadcast works even if DB is offline
+_mem_users: Set[int] = set()
+_mem_chats: Set[int] = set()
 
 # Table names — Config.env ke TABLE_PREFIX se bante hain
 _P = console.TABLE_PREFIX          # "pmv2_" ya "radhika_"
@@ -63,6 +69,20 @@ async def init_db():
             statement_cache_size=0,
         )
         await _create_tables()
+        # Warm memory cache from DB so /stats and broadcast see existing data
+        try:
+            async with _pool.acquire() as conn:
+                urows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
+                crows = await conn.fetch(f"SELECT chat_id FROM {T_CHATS} WHERE chat_id < 0")
+            for r in urows:
+                _mem_users.add(int(r["user_id"]))
+            for r in crows:
+                _mem_chats.add(int(r["chat_id"]))
+            log.info(
+                f"✅ Cache warmed — users={len(_mem_users)} chats={len(_mem_chats)}"
+            )
+        except Exception as e:
+            log.warning(f"⚠️ Cache warm failed: {e}")
         log.info(f"✅ PostgreSQL connected (prefix='{_P}')")
     except Exception as e:
         log.warning(f"⚠️ DB connection failed: {e} — running WITHOUT database (in-memory only).")
@@ -180,85 +200,115 @@ async def group_assistant(self, chat_id: int):
 
 
 async def is_served_user(user_id: int) -> bool:
+    if not user_id or user_id <= 0:
+        return False
+    if user_id in _mem_users:
+        return True
     if not _ok():
         return False
     async with _pool.acquire() as conn:
         row = await conn.fetchrow(
             f"SELECT 1 FROM {T_USERS} WHERE user_id=$1", user_id
         )
-    return row is not None
+    if row is not None:
+        _mem_users.add(user_id)
+        return True
+    return False
 
 
 async def add_served_user(user_id: int):
-    if not _ok() or not user_id or user_id <= 0:
+    if not user_id or user_id <= 0:
         return
-    if await is_served_user(user_id):
+    _mem_users.add(int(user_id))
+    if not _ok():
         return
-    async with _pool.acquire() as conn:
-        await conn.execute(
-            f"INSERT INTO {T_USERS}(user_id) VALUES($1) ON CONFLICT DO NOTHING",
-            user_id,
-        )
+    try:
+        async with _pool.acquire() as conn:
+            await conn.execute(
+                f"INSERT INTO {T_USERS}(user_id) VALUES($1) ON CONFLICT DO NOTHING",
+                user_id,
+            )
+    except Exception as e:
+        log.warning(f"add_served_user DB error: {e}")
 
 
 async def get_served_users() -> list:
-    if not _ok():
-        return []
-    async with _pool.acquire() as conn:
-        rows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
-    return [{"user_id": r["user_id"]} for r in rows]
+    # Prefer DB when available, always merge with memory so nothing is lost this session
+    ids: Set[int] = set(_mem_users)
+    if _ok():
+        try:
+            async with _pool.acquire() as conn:
+                rows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
+            for r in rows:
+                uid = int(r["user_id"])
+                ids.add(uid)
+                _mem_users.add(uid)
+        except Exception as e:
+            log.warning(f"get_served_users DB error: {e}")
+    return [{"user_id": uid} for uid in ids if uid > 0]
 
 
 async def count_served_users() -> int:
-    if not _ok():
-        return 0
-    async with _pool.acquire() as conn:
-        val = await conn.fetchval(
-            f"SELECT COUNT(*) FROM {T_USERS} WHERE user_id > 0"
-        )
-    return int(val or 0)
+    users = await get_served_users()
+    return len(users)
 
 
 async def is_served_chat(chat_id: int) -> bool:
+    if not chat_id:
+        return False
+    if chat_id in _mem_chats:
+        return True
     if not _ok():
         return False
     async with _pool.acquire() as conn:
         row = await conn.fetchrow(
             f"SELECT 1 FROM {T_CHATS} WHERE chat_id=$1", chat_id
         )
-    return row is not None
+    if row is not None:
+        _mem_chats.add(chat_id)
+        return True
+    return False
 
 
 async def add_served_chat(chat_id: int):
-    if not _ok() or not chat_id:
+    if not chat_id:
         return
-    if await is_served_chat(chat_id):
+    # Only track groups/channels (negative ids) for broadcast targets
+    cid = int(chat_id)
+    if cid < 0:
+        _mem_chats.add(cid)
+    if not _ok():
         return
-    async with _pool.acquire() as conn:
-        await conn.execute(
-            f"INSERT INTO {T_CHATS}(chat_id) VALUES($1) ON CONFLICT DO NOTHING",
-            chat_id,
-        )
+    try:
+        async with _pool.acquire() as conn:
+            await conn.execute(
+                f"INSERT INTO {T_CHATS}(chat_id) VALUES($1) ON CONFLICT DO NOTHING",
+                cid,
+            )
+    except Exception as e:
+        log.warning(f"add_served_chat DB error: {e}")
 
 
 async def get_served_chats() -> list:
-    if not _ok():
-        return []
-    async with _pool.acquire() as conn:
-        rows = await conn.fetch(
-            f"SELECT chat_id FROM {T_CHATS} WHERE chat_id < 0"
-        )
-    return [{"chat_id": r["chat_id"]} for r in rows]
+    ids: Set[int] = set(c for c in _mem_chats if c < 0)
+    if _ok():
+        try:
+            async with _pool.acquire() as conn:
+                rows = await conn.fetch(
+                    f"SELECT chat_id FROM {T_CHATS} WHERE chat_id < 0"
+                )
+            for r in rows:
+                cid = int(r["chat_id"])
+                ids.add(cid)
+                _mem_chats.add(cid)
+        except Exception as e:
+            log.warning(f"get_served_chats DB error: {e}")
+    return [{"chat_id": cid} for cid in ids if cid < 0]
 
 
 async def count_served_chats() -> int:
-    if not _ok():
-        return 0
-    async with _pool.acquire() as conn:
-        val = await conn.fetchval(
-            f"SELECT COUNT(*) FROM {T_CHATS} WHERE chat_id < 0"
-        )
-    return int(val or 0)
+    chats = await get_served_chats()
+    return len(chats)
 
 
 async def is_admins_only(chat_id: int) -> bool:
