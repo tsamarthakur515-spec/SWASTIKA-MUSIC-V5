@@ -1,10 +1,29 @@
-# SWASTIKA MUSIC V5
+# 𝐒𝐀𝐌𝐀𝐑 𝗠𝗨𝗦𝗜𝗖 𝗩2 🥰
 
-Full code copied from SWASTIKA-MUSICV4 (direct copy, not a fork).
+Advanced Telegram VC Music Bot (based on AdityaPlayer structure).
 
-## Setup
-1. Fill `Config.env`
-2. `pip install -r requirements.txt`
-3. `python3 main.py`
+## Folder Structure
 
-Default Groq model: `openai/gpt-oss-20b`
+- `SAMARMUSIC/` — main package (renamed from AdityaHalder)
+- `main.py` — entry point
+- `Config.env` — fill your variables here
+- `requirements.txt`
+
+## Quick Start (VPS)
+
+```bash
+apt update -y && apt install sudo -y && sudo apt install curl ffmpeg git nano python3-pip screen -y
+cd && git clone https://github.com/panda-huu/PANDAMUSICV2 && cd SAMARMUSICV2
+pip3 install -r requirements.txt --force-reinstall
+nano Config.env   # fill your vars
+screen -R SAMARMUSIC
+python3 -m SAMARMUSIC
+```
+
+## Commands
+
+- Music: /play /vplay /pause /resume /skip /end
+- Welcome: /welcome on|off  /setwelcome  /resetwelcome
+- Moderation, Chatbot, Abuse filter also included
+
+Made with ❤️ for Samar

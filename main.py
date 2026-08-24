@@ -3,12 +3,14 @@ import sys
 import runpy
 os.system("pip install -U kurigram")
 os.system("pip install -U yt-dlp")
+# Root directory set karo
 ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(ROOT)
 
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# PANDAMUSIC package start
 if __name__ == "__main__":
     try:
         runpy.run_module("PANDAMUSIC", run_name="__main__", alter_sys=True)
