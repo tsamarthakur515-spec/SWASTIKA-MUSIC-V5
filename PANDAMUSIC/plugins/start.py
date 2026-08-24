@@ -19,6 +19,8 @@ except Exception:
 
 # Title emoji for welcome
 E_TITLE = "6111778259374971023"
+# All start menu buttons emoji
+E_BTN_ALL = "6111504695728020416"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -167,40 +169,41 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
     if owner:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E.STAR)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E_BTN_ALL)
     elif getattr(console, "OWNER_ID", 0):
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E.STAR)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E_BTN_ALL)
     else:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E.STAR)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E_BTN_ALL)
     if support:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E.CHECK)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E_BTN_ALL)
     else:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E.CHECK)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E_BTN_ALL)
     if channel:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E.FIRE)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E_BTN_ALL)
     else:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E.FIRE)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E_BTN_ALL)
 
     add_url = add_group_url(bot_username)
 
     return InlineKeyboardMarkup([
-        # Full admin add-to-group (same rights as your channel invite link)
+        # Full admin add-to-group
         [_btn(
             smallcaps("➕ add me in your group ➕"),
             _PRIMARY,
             url=add_url,
-            icon_custom_emoji_id=E.STAR,
+            icon_custom_emoji_id=E_BTN_ALL,
         )],
-        # Extra clear CTA matching channel-style #MUSIC BOT buttons
+        # #MUSIC BOT button
         [_btn(
             "🎵 #MUSIC BOT",
             _SUCCESS,
             url=add_url,
+            icon_custom_emoji_id=E_BTN_ALL,
         )],
-        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E.CHECK)],
+        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_BTN_ALL)],
         [support_btn, update_btn],
-        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E.GEAR)],
-        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E.SKULL2)],
+        [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_BTN_ALL)],
+        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_BTN_ALL)],
     ])
 
 
