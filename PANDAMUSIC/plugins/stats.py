@@ -52,6 +52,7 @@ except Exception:
     _DANGER = "danger"
 
 # User provided custom emoji IDs
+E_TITLE   = "6111778259374971023"   # Swastika Music v5 title emoji (everywhere)
 E_MUSIC   = "6222160271796871446"
 E_STAR    = "6222119723010629429"
 E_DIAMOND = "6114147788537204268"
@@ -59,7 +60,7 @@ E_FIRE    = "6113735965598028355"
 E_CHART   = "6113675681437061434"
 E_HEADPH  = "6113641540742028885"
 E_HEART   = "6115962158816693929"
-E_STAR2   = "6113929148932034466"   # CLOSE button emoji
+E_STAR2   = "6113929148932034466"
 E_TROPHY  = "6113857813820216054"
 E_MUSIC2  = "6113782179446132587"
 E_CALEND  = "6159137390574178597"
@@ -71,6 +72,11 @@ E_CHECK   = "6088909942230619591"   # GENERAL main emoji
 E_BOLT    = "6089078549761758735"
 E_GLOW    = "6089264504665806086"
 E_WAVE    = "6089398065263810456"
+
+# Button emojis
+E_BTN_GENERAL = "5453969464980691485"
+E_BTN_OVERALL = "5192886348746355902"
+E_BTN_CLOSE   = "5454317078158795717"
 
 
 def _btn(text, style=None, emoji_id=None, **kwargs):
@@ -98,10 +104,10 @@ def stats_home_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("❖ GENERAL ❖", _PRIMARY, callback_data="stats_general"),
-                _btn("❖ OVERALL ❖", _SUCCESS, callback_data="stats_overall"),
+                _btn("❖ GENERAL ❖", _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
+                _btn("❖ OVERALL ❖", _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
             ],
-            [_btn("CLOSE", _DANGER, emoji_id=E_STAR2, callback_data="close")],
+            [_btn("CLOSE", _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
         ]
     )
 
@@ -110,10 +116,10 @@ def stats_back_markup():
     return InlineKeyboardMarkup(
         [
             [
-                _btn("❖ GENERAL ❖", _PRIMARY, callback_data="stats_general"),
-                _btn("❖ OVERALL ❖", _SUCCESS, callback_data="stats_overall"),
+                _btn("❖ GENERAL ❖", _PRIMARY, emoji_id=E_BTN_GENERAL, callback_data="stats_general"),
+                _btn("❖ OVERALL ❖", _SUCCESS, emoji_id=E_BTN_OVERALL, callback_data="stats_overall"),
             ],
-            [_btn("CLOSE", _DANGER, emoji_id=E_STAR2, callback_data="close")],
+            [_btn("CLOSE", _DANGER, emoji_id=E_BTN_CLOSE, callback_data="close")],
         ]
     )
 
@@ -158,9 +164,8 @@ async def build_overall_text(username: str) -> str:
     assistants_n = _assistant_count()
     duration = getattr(console, "DURATION_LIMIT", 60)
 
-    # E_GEM (6172201280929273675) used as main emoji throughout OVERALL
     return (
-        f"{tg_emoji(E_GEM, '💠')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
+        f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
         f"{tg_emoji(E_GEM, '💠')} <b>@{username}</b> — {smallcaps('overall stats')}\n\n"
         f"{tg_emoji(E_GEM, '💠')} {smallcaps('assistants')} : <code>{assistants_n}</code>\n"
         f"{tg_emoji(E_GEM, '💠')} {smallcaps('blocked')} : <code>0</code>\n"
@@ -170,7 +175,7 @@ async def build_overall_text(username: str) -> str:
         f"{tg_emoji(E_GEM, '💠')} {smallcaps('sudoers')} : <code>{sudos}</code>\n\n"
         f"{tg_emoji(E_GEM, '💠')} {smallcaps('auto leaving assistant')} : <code>False</code>\n"
         f"{tg_emoji(E_GEM, '💠')} {smallcaps('play duration limit')} : <code>{duration}</code> {smallcaps('minutes')}\n\n"
-        f"{tg_emoji(E_GEM, '💠')} <i>{smallcaps('powered by swastika music')}</i>"
+        f"{tg_emoji(E_TITLE, '✨')} <i>{smallcaps('powered by swastika music')}</i>"
     )
 
 
@@ -203,9 +208,8 @@ async def build_general_text(username: str) -> str:
     storage_used = _gib(du.used)
     storage_left = _gib(du.free)
 
-    # E_CHECK (6088909942230619591) used as main emoji throughout GENERAL
     return (
-        f"{tg_emoji(E_CHECK, '✅')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
+        f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
         f"{tg_emoji(E_CHECK, '✅')} <b>@{username}</b> — {smallcaps('general stats')}\n\n"
         f"{tg_emoji(E_CHECK, '✅')} <b>{smallcaps('system info')}</b>\n"
         f"{tg_emoji(E_CHECK, '✅')} {smallcaps('modules')} : <code>{modules}</code>\n"
@@ -227,7 +231,7 @@ async def build_general_text(username: str) -> str:
         f"{tg_emoji(E_CHECK, '✅')} {smallcaps('served users')} : <code>{users}</code>\n"
         f"{tg_emoji(E_CHECK, '✅')} {smallcaps('blocked users')} : <code>0</code>\n"
         f"{tg_emoji(E_CHECK, '✅')} {smallcaps('sudo users')} : <code>{sudos}</code>\n\n"
-        f"{tg_emoji(E_CHECK, '✅')} <i>{smallcaps('powered by swastika music')}</i>"
+        f"{tg_emoji(E_TITLE, '✨')} <i>{smallcaps('powered by swastika music')}</i>"
     )
 
 
@@ -254,9 +258,9 @@ async def stats_cmd(client, message: Message):
 
     photo = getattr(console, "STATS_IMAGE_URL", None)
 
-    # Completely new premium home caption
+    # Premium home caption with new title emoji
     caption = (
-        f"{tg_emoji(E_MUSIC, '🎵')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n"
+        f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n"
         f"{tg_emoji(E_STAR, '⭐')} {smallcaps('welcome to the stats dashboard')}\n\n"
         f"{tg_emoji(E_GLOW, '✨')} {smallcaps('tap a button below to explore')}\n"
         f"{tg_emoji(E_ROCKET, '🚀')} {smallcaps('live system & bot statistics')}\n\n"
