@@ -35,6 +35,19 @@ def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
         return InlineKeyboardButton(text, **kwargs)
 
 
+# Full admin rights when user adds bot to a group via start menu button
+ADD_GROUP_ADMIN = (
+    "delete_messages+manage_video_chats+pin_messages+"
+    "invite_users+ban_users+change_info+promote_members"
+)
+
+
+def add_group_url(bot_username: str) -> str:
+    return (
+        f"https://t.me/{bot_username}?startgroup=s&admin={ADD_GROUP_ADMIN}"
+    )
+
+
 # ── Command lists by category ─────────────────────────────────
 MUSIC_COMMANDS = [
     ("play", "/play"), ("vplay", "/vplay"), ("pause", "/pause"),
@@ -164,8 +177,23 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
         update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E.FIRE)
     else:
         update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E.FIRE)
+
+    add_url = add_group_url(bot_username)
+
     return InlineKeyboardMarkup([
-        [_btn(smallcaps("➕ add me in your group ➕"), _PRIMARY, url=f"https://t.me/{bot_username}?startgroup=true", icon_custom_emoji_id=E.STAR)],
+        # Full admin add-to-group (same rights as your channel invite link)
+        [_btn(
+            smallcaps("➕ add me in your group ➕"),
+            _PRIMARY,
+            url=add_url,
+            icon_custom_emoji_id=E.STAR,
+        )],
+        # Extra clear CTA matching channel-style #MUSIC BOT buttons
+        [_btn(
+            "🎵 #MUSIC BOT",
+            _SUCCESS,
+            url=add_url,
+        )],
         [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E.CHECK)],
         [support_btn, update_btn],
         [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E.GEAR)],
@@ -365,7 +393,7 @@ async def support_alert_cb(client, query):
 async def update_alert_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    await query.answer(smallcaps("update channel set nahi hai config me"), show_alert=True)
+    await query.answer(smallcaps("update chat set nahi hai config me"), show_alert=True)
 
 
 @bot.on_callback_query(rgx("about_menu"))
