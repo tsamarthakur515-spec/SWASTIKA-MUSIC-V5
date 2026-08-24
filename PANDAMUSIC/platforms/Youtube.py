@@ -1,7 +1,8 @@
 import asyncio
 import os
 import subprocess
-from typing import Optional, Dict, Any, List
+import time
+from typing import Optional, Dict, Any, List, Tuple
 
 import aiohttp
 
@@ -11,10 +12,11 @@ API_URL = getattr(console, "SHRUTI_API_URL", None) or "https://aruyt.up.railway.
 API_KEY = getattr(console, "SHRUTI_API_KEY", None) or "YUKI-XJd3KfUSWeuOWsiZyuIrlmQf"
 DOWNLOAD_DIR = "downloads"
 
-# Per-file locks so two concurrent downloads (same vidid+type) never race on
-# the same path — prevents one task reading a half-overwritten file while
-# another is still writing/validating it.
 _dl_locks: Dict[str, asyncio.Lock] = {}
+_search_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_url_cache: Dict[str, Tuple[float, str]] = {}
+SEARCH_TTL = 600.0
+URL_TTL = 240.0
 
 
 def _get_lock(key: str) -> asyncio.Lock:
@@ -39,7 +41,7 @@ def check_duration(file_path: str) -> float:
                 file_path,
             ],
             stderr=subprocess.DEVNULL,
-            timeout=10,
+            timeout=8,
         )
         return float(out.strip())
     except Exception:
@@ -47,7 +49,8 @@ def check_duration(file_path: str) -> float:
 
 
 def has_video_stream(file_path: str) -> bool:
-    """True if file has at least one video stream."""
+    if not file_path or str(file_path).startswith(("http://", "https://")):
+        return True
     try:
         out = subprocess.check_output(
             [
@@ -63,7 +66,7 @@ def has_video_stream(file_path: str) -> bool:
                 file_path,
             ],
             stderr=subprocess.DEVNULL,
-            timeout=12,
+            timeout=8,
         )
         return b"video" in out.lower()
     except Exception:
@@ -155,7 +158,7 @@ async def _search_yts(query: str) -> Optional[Dict[str, Any]]:
     try:
         from youtubesearchpython.__future__ import VideosSearch
 
-        results = VideosSearch(str(query).strip(), limit=5)
+        results = VideosSearch(str(query).strip(), limit=1)
         data = await results.next()
         items = data.get("result") or []
         for item in items:
@@ -175,13 +178,13 @@ async def _search_ytdlp(query: str) -> Optional[Dict[str, Any]]:
             opts = {
                 "quiet": True,
                 "no_warnings": True,
-                "extract_flat": True,
+                "extract_flat": "in_playlist",
                 "skip_download": True,
                 "default_search": "ytsearch",
+                "noplaylist": True,
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(f"ytsearch5:{query}", download=False)
-                return info
+                return ydl.extract_info(f"ytsearch1:{query}", download=False)
 
         info = await asyncio.to_thread(_run)
         entries = (info or {}).get("entries") or []
@@ -212,11 +215,15 @@ async def search(query: str) -> Optional[Dict[str, Any]]:
         return None
 
     q = str(query).strip()
+    cache_key = q.lower()
+    cached = _search_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < SEARCH_TTL:
+        return cached[1]
 
     if "youtube.com" in q or "youtu.be" in q or (len(q) == 11 and " " not in q):
         vidid = _to_vidid(q)
         if vidid and len(vidid) >= 10:
-            return {
+            result = {
                 "title": "YouTube Video",
                 "link": f"https://www.youtube.com/watch?v={vidid}",
                 "vidid": vidid,
@@ -224,17 +231,42 @@ async def search(query: str) -> Optional[Dict[str, Any]]:
                 "thumbnail": f"https://i.ytimg.com/vi/{vidid}/hqdefault.jpg",
                 "channel": "YouTube Music",
             }
+            _search_cache[cache_key] = (time.time(), result)
+            return result
 
-    result = await _search_yts(q)
-    if result:
-        return result
+    yts_task = asyncio.create_task(_search_yts(q))
+    ytdlp_task = asyncio.create_task(_search_ytdlp(q))
+    result = None
+    pending = {yts_task, ytdlp_task}
+    try:
+        while pending and result is None:
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED, timeout=8
+            )
+            if not done:
+                break
+            for task in done:
+                try:
+                    got = task.result()
+                except Exception:
+                    got = None
+                if got:
+                    result = got
+                    break
+    finally:
+        for task in pending:
+            task.cancel()
 
-    result = await _search_ytdlp(q)
-    if result:
-        return result
+    if not result:
+        print(f"[Youtube.search] No results for: {q}", flush=True)
+        return None
 
-    print(f"[Youtube.search] No results for: {q}", flush=True)
-    return None
+    _search_cache[cache_key] = (time.time(), result)
+    if len(_search_cache) > 256:
+        oldest = sorted(_search_cache.items(), key=lambda x: x[1][0])[:64]
+        for k, _ in oldest:
+            _search_cache.pop(k, None)
+    return result
 
 
 def _safe_remove(path: str):
@@ -246,7 +278,6 @@ def _safe_remove(path: str):
 
 
 def _clean_partials(vidid: str):
-    """Remove leftover .part / partial files that trigger HTTP 416."""
     try:
         if not os.path.isdir(DOWNLOAD_DIR):
             return
@@ -261,14 +292,13 @@ def _clean_partials(vidid: str):
 
 
 def _ytdlp_base_opts(safe_mode: bool = False) -> dict:
-    """Shared opts. safe_mode=True disables concurrent fragments (avoids 416)."""
     concurrent = 1 if safe_mode else 8
     return {
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
-        "retries": 3,
-        "fragment_retries": 3,
+        "retries": 2,
+        "fragment_retries": 2,
         "concurrent_fragment_downloads": concurrent,
         "http_chunk_size": 10485760 if not safe_mode else 5242880,
         "buffersize": 1024 * 1024 * 16,
@@ -276,10 +306,9 @@ def _ytdlp_base_opts(safe_mode: bool = False) -> dict:
         "continuedl": False,
         "no_part": True,
         "overwrites": True,
-        # Prefer mobile/TV clients — web often returns no usable formats
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios", "mweb", "tv", "web"],
+                "player_client": ["android", "ios", "mweb"],
             }
         },
     }
@@ -292,6 +321,123 @@ def _is_416_error(text: str) -> bool:
         or "requested range not satisfiable" in t
         or "range not satisfiable" in t
     )
+
+
+def _pick_format_url(info: dict, is_video: bool) -> Optional[str]:
+    if not info:
+        return None
+    direct = info.get("url")
+    if direct and str(direct).startswith("http"):
+        return direct
+    formats = info.get("formats") or []
+    if not formats:
+        return None
+
+    def _ok(fmt: dict) -> bool:
+        url = fmt.get("url")
+        if not url or not str(url).startswith("http"):
+            return False
+        proto = str(fmt.get("protocol") or "")
+        if proto.startswith("m3u8") or "dash" in proto:
+            return False
+        return True
+
+    if is_video:
+        ranked = []
+        for fmt in formats:
+            if not _ok(fmt):
+                continue
+            vcodec = str(fmt.get("vcodec") or "none")
+            acodec = str(fmt.get("acodec") or "none")
+            if vcodec == "none":
+                continue
+            height = int(fmt.get("height") or 0)
+            progressive = acodec != "none"
+            score = (2 if progressive else 0) + (1 if 240 <= height <= 480 else 0)
+            ranked.append((score, height, fmt.get("url")))
+        ranked.sort(key=lambda x: (x[0], -abs((x[1] or 360) - 360)), reverse=True)
+        return ranked[0][2] if ranked else None
+
+    ranked = []
+    for fmt in formats:
+        if not _ok(fmt):
+            continue
+        acodec = str(fmt.get("acodec") or "none")
+        vcodec = str(fmt.get("vcodec") or "none")
+        if acodec == "none":
+            continue
+        abr = int(fmt.get("abr") or fmt.get("tbr") or 0)
+        ext = str(fmt.get("ext") or "")
+        score = abr
+        if vcodec == "none":
+            score += 1000
+        if ext in ("m4a", "webm", "opus"):
+            score += 50
+        ranked.append((score, fmt.get("url")))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    return ranked[0][1] if ranked else None
+
+
+async def get_direct_url(vidid: str, is_video: bool = False) -> Optional[str]:
+    vidid = _to_vidid(vidid)
+    if not vidid:
+        return None
+
+    cache_key = f"{vidid}:{'v' if is_video else 'a'}"
+    cached = _url_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < URL_TTL:
+        return cached[1]
+
+    try:
+        import yt_dlp
+    except Exception as e:
+        print(f"[Youtube] yt-dlp missing for direct url: {e}", flush=True)
+        return None
+
+    fmt = (
+        "best[height<=480][ext=mp4]/18/22/best[height<=480]/best"
+        if is_video
+        else "bestaudio[ext=m4a]/bestaudio[ext=webm]/140/251/bestaudio/best"
+    )
+
+    def _run():
+        opts = _ytdlp_base_opts(False)
+        opts.update({"format": fmt, "skip_download": True, "noplaylist": True})
+        url = f"https://www.youtube.com/watch?v={vidid}"
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        return _pick_format_url(info or {}, is_video)
+
+    try:
+        url = await asyncio.wait_for(asyncio.to_thread(_run), timeout=12)
+    except Exception as e:
+        print(f"[Youtube] direct url fail {vidid}: {e}", flush=True)
+        return None
+
+    if url:
+        _url_cache[cache_key] = (time.time(), url)
+        print(f"[Youtube] direct url OK {vidid} video={is_video}", flush=True)
+    return url
+
+
+def cached_file(vidid: str, is_video: bool) -> Optional[str]:
+    vidid = _to_vidid(vidid)
+    if not vidid or not os.path.isdir(DOWNLOAD_DIR):
+        return None
+    exts = (".mp4", ".mkv", ".webm") if is_video else (".mp3", ".m4a", ".webm", ".opus", ".ogg")
+    for name in os.listdir(DOWNLOAD_DIR):
+        if not name.startswith(vidid) or not name.endswith(exts):
+            continue
+        path = os.path.join(DOWNLOAD_DIR, name)
+        try:
+            if os.path.getsize(path) > 1024:
+                if is_video and not has_video_stream(path):
+                    continue
+                if check_duration(path) > 2:
+                    return path
+        except Exception:
+            continue
+    return None
 
 
 async def _download_api(
@@ -318,7 +464,6 @@ async def _download_api(
 async def _download_api_locked(
     vidid: str, media_type: str, ext: str, timeout_total: int, file_path: str, loop
 ) -> Optional[str]:
-    # Reuse cache only if valid (and for video, must have video stream)
     try:
         if os.path.exists(file_path) and os.path.getsize(file_path) > 1024:
             dur = await loop.run_in_executor(None, check_duration, file_path)
@@ -336,32 +481,26 @@ async def _download_api_locked(
         return None
 
     full_url = f"https://www.youtube.com/watch?v={vidid}"
-    url_variants = [full_url, vidid]
-    # Some APIs use different type names
     type_variants = [media_type]
     if media_type == "video":
-        type_variants = ["video", "mp4", "Video"]
+        type_variants = ["video", "mp4"]
 
-    for attempt in range(3):
-        use_url = url_variants[attempt % len(url_variants)]
+    for attempt in range(2):
         use_type = type_variants[attempt % len(type_variants)]
         try:
-            timeout = aiohttp.ClientTimeout(total=timeout_total, connect=20)
+            timeout = aiohttp.ClientTimeout(total=timeout_total, connect=8)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(
                     f"{API_URL.rstrip('/')}/download",
                     params={
-                        "url": use_url,
+                        "url": full_url,
                         "type": use_type,
                         "api_key": API_KEY,
                     },
                 ) as resp:
 
                     if resp.status == 429:
-                        wait = min(12, 2 * (attempt + 1))
-                        retry_after = resp.headers.get("Retry-After")
-                        if retry_after and str(retry_after).isdigit():
-                            wait = float(retry_after)
+                        wait = min(4, 1.5 * (attempt + 1))
                         print(
                             f"[Youtube] {use_type} 429 — wait {wait}s (try {attempt+1})",
                             flush=True,
@@ -371,36 +510,27 @@ async def _download_api_locked(
 
                     if resp.status in (500, 502, 503, 504):
                         body = (await resp.text())[:400]
-                        # HTTP 416 from upstream yt-dlp — retrying same API is useless
                         if _is_416_error(body):
                             print(
-                                f"[Youtube] {use_type} HTTP 416 from API — skip API, use local yt-dlp",
+                                f"[Youtube] {use_type} HTTP 416 from API — skip API",
                                 flush=True,
                             )
                             return None
-                        wait = min(8, 2 ** attempt)
                         print(
-                            f"[Youtube] {use_type} HTTP {resp.status}: {body} "
-                            f"(try {attempt+1}, wait {wait}s)",
+                            f"[Youtube] {use_type} HTTP {resp.status} (try {attempt+1})",
                             flush=True,
                         )
-                        await asyncio.sleep(wait)
                         continue
 
                     if resp.status != 200:
                         body = (await resp.text())[:250]
                         if _is_416_error(body):
-                            print(
-                                f"[Youtube] {use_type} 416 response — skip API",
-                                flush=True,
-                            )
+                            print(f"[Youtube] {use_type} 416 response — skip API", flush=True)
                             return None
                         print(
-                            f"[Youtube] {use_type} HTTP {resp.status}: {body} "
-                            f"(try {attempt+1})",
+                            f"[Youtube] {use_type} HTTP {resp.status} (try {attempt+1})",
                             flush=True,
                         )
-                        await asyncio.sleep(1)
                         continue
 
                     with open(file_path, "wb") as f:
@@ -408,32 +538,18 @@ async def _download_api_locked(
                             f.write(chunk)
 
             if not (os.path.exists(file_path) and os.path.getsize(file_path) > 1024):
-                await asyncio.sleep(0.5)
                 continue
 
             dur = await loop.run_in_executor(None, check_duration, file_path)
             if not (dur and dur > 2):
-                print(
-                    f"[Youtube] {use_type} invalid duration ({dur}s) — retry",
-                    flush=True,
-                )
+                print(f"[Youtube] {use_type} invalid duration ({dur}s)", flush=True)
                 _safe_remove(file_path)
-                await asyncio.sleep(1)
                 continue
 
             if media_type == "video":
                 has_v = await loop.run_in_executor(None, has_video_stream, file_path)
-                print(
-                    f"[Youtube] API video file size={os.path.getsize(file_path)} "
-                    f"has_video={has_v}",
-                    flush=True,
-                )
                 if not has_v:
                     _safe_remove(file_path)
-                    # don't keep retrying same audio-only API response forever
-                    if attempt >= 1:
-                        return None
-                    await asyncio.sleep(0.5)
                     continue
 
             return file_path
@@ -442,13 +558,8 @@ async def _download_api_locked(
             print(f"[Youtube] {use_type} timeout (try {attempt+1})", flush=True)
             _safe_remove(file_path)
         except Exception as e:
-            print(
-                f"[Youtube] {use_type} error (try {attempt+1}): {e}",
-                flush=True,
-            )
+            print(f"[Youtube] {use_type} error (try {attempt+1}): {e}", flush=True)
             _safe_remove(file_path)
-
-        await asyncio.sleep(1)
 
     print(f"[Youtube] {media_type} API FAILED for {vidid}", flush=True)
     return None
@@ -467,7 +578,6 @@ def _find_downloaded(vidid: str, exts: tuple) -> Optional[str]:
 
 
 async def _download_ytdlp_video(vidid: str) -> Optional[str]:
-    """Fallback: download real video with yt-dlp (merged mp4)."""
     try:
         import yt_dlp
     except Exception as e:
@@ -481,31 +591,16 @@ async def _download_ytdlp_video(vidid: str) -> Optional[str]:
 
     lock = _get_lock(final_path)
     await lock.acquire()
-
     _clean_partials(vidid)
 
-    # Prefer progressive single-file first (faster, no merge), then merged
     format_attempts: List[str] = [
-        # progressive single-file (fastest)
-        "best[height<=720][ext=mp4]/best[height<=480][ext=mp4]/best[ext=mp4]/best",
-        # any best under 720p (merged)
-        "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-        # no height filter
-        "bestvideo+bestaudio/best",
-        # absolute fallback
-        "best",
-        "18/22/best",
+        "best[height<=480][ext=mp4]/18/best[ext=mp4]/best",
+        "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
     ]
 
     def _run(fmt: str, safe_mode: bool = False):
         opts = _ytdlp_base_opts(safe_mode=safe_mode)
-        opts.update(
-            {
-                "format": fmt,
-                "outtmpl": out_tmpl,
-                "merge_output_format": "mp4",
-            }
-        )
+        opts.update({"format": fmt, "outtmpl": out_tmpl, "merge_output_format": "mp4"})
         url = f"https://www.youtube.com/watch?v={vidid}"
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
@@ -532,24 +627,19 @@ async def _download_ytdlp_video(vidid: str) -> Optional[str]:
                     path = await asyncio.to_thread(_run, fmt, safe)
                     if path and has_video_stream(path):
                         print(
-                            f"[Youtube] yt-dlp OK path={path} size={os.path.getsize(path)} "
-                            f"fmt={fmt[:40]} safe={safe}",
+                            f"[Youtube] yt-dlp OK path={path} size={os.path.getsize(path)}",
                             flush=True,
                         )
                         return path
                     if path:
-                        print("[Youtube] yt-dlp file has no video stream — try next", flush=True)
                         _safe_remove(path)
-                    break  # format had no video — next fmt, not safe retry
+                    break
                 except Exception as e:
                     last_err = e
                     err = str(e)
                     print(f"[Youtube] yt-dlp video fail: {err[:180]}", flush=True)
                     if _is_416_error(err) and not safe:
-                        print("[Youtube] 416 detected — retry same fmt in safe mode", flush=True)
                         continue
-                    if "format is not available" in err.lower() or "requested format" in err.lower():
-                        break
                     break
 
         print(f"[Youtube] yt-dlp video all formats failed: {last_err}", flush=True)
@@ -562,7 +652,6 @@ async def _download_ytdlp_video(vidid: str) -> Optional[str]:
 
 
 async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
-    """Fallback: download audio with yt-dlp — prefer raw (no re-encode) for speed."""
     try:
         import yt_dlp
     except Exception as e:
@@ -576,26 +665,16 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
 
     lock = _get_lock(final_path)
     await lock.acquire()
-
     _clean_partials(vidid)
 
-    # Prefer fast containers first (m4a/webm/opus) — no ffmpeg re-encode
     format_attempts: List[str] = [
-        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-        "140/251/250/249/bestaudio/best",
+        "bestaudio[ext=m4a]/bestaudio[ext=webm]/140/251/bestaudio/best",
         "bestaudio/best",
-        "bestaudio*",
-        "best",
     ]
 
     def _run(fmt: str, extract_mp3: bool, safe_mode: bool = False):
         opts = _ytdlp_base_opts(safe_mode=safe_mode)
-        opts.update(
-            {
-                "format": fmt,
-                "outtmpl": out_tmpl,
-            }
-        )
+        opts.update({"format": fmt, "outtmpl": out_tmpl})
         if extract_mp3:
             opts["postprocessors"] = [
                 {
@@ -617,7 +696,6 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
         print(f"[Youtube] yt-dlp audio download for {vidid}...", flush=True)
         last_err = None
 
-        # Pass 1: raw formats (fast — no ffmpeg convert)
         for fmt in format_attempts:
             for safe in (False, True):
                 try:
@@ -626,7 +704,7 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
                     if path:
                         print(
                             f"[Youtube] yt-dlp audio OK (raw) path={path} "
-                            f"size={os.path.getsize(path)} safe={safe}",
+                            f"size={os.path.getsize(path)}",
                             flush=True,
                         )
                         return path
@@ -635,30 +713,17 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
                     err = str(e)
                     print(f"[Youtube] yt-dlp audio raw fail: {err[:180]}", flush=True)
                     if _is_416_error(err) and not safe:
-                        print("[Youtube] 416 — retry audio in safe mode (no concurrent fragments)", flush=True)
                         continue
                     break
 
-        # Pass 2: extract to mp3 only if raw failed
-        for fmt in format_attempts:
-            for safe in (False, True):
-                try:
-                    _clean_partials(vidid)
-                    path = await asyncio.to_thread(_run, fmt, True, safe)
-                    if path:
-                        print(
-                            f"[Youtube] yt-dlp audio OK path={path} "
-                            f"size={os.path.getsize(path)} safe={safe}",
-                            flush=True,
-                        )
-                        return path
-                except Exception as e:
-                    last_err = e
-                    err = str(e)
-                    print(f"[Youtube] yt-dlp audio fmt fail: {err[:180]}", flush=True)
-                    if _is_416_error(err) and not safe:
-                        continue
-                    break
+        for fmt in format_attempts[:1]:
+            try:
+                _clean_partials(vidid)
+                path = await asyncio.to_thread(_run, fmt, True, True)
+                if path:
+                    return path
+            except Exception as e:
+                last_err = e
 
         print(f"[Youtube] yt-dlp audio all formats failed: {last_err}", flush=True)
         return None
@@ -669,35 +734,62 @@ async def _download_ytdlp_audio(vidid: str) -> Optional[str]:
         lock.release()
 
 
+async def _race_download(api_coro, ytdlp_coro) -> Optional[str]:
+    api_task = asyncio.create_task(api_coro)
+    ytdlp_task = asyncio.create_task(ytdlp_coro)
+    pending = {api_task, ytdlp_task}
+    winner = None
+    try:
+        while pending and winner is None:
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in done:
+                try:
+                    path = task.result()
+                except Exception:
+                    path = None
+                if path:
+                    winner = path
+                    break
+    finally:
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except Exception:
+                pass
+    return winner
+
+
 async def download_song(vidid: str) -> Optional[str]:
     try:
-        path = await _download_api(vidid, "audio", "mp3", 80)
-        if path:
-            return path
-
-        print(f"[Youtube] API audio failed — trying local yt-dlp for {vidid}", flush=True)
-        return await _download_ytdlp_audio(vidid)
+        cached = cached_file(vidid, False)
+        if cached:
+            return cached
+        return await _race_download(
+            _download_api(vidid, "audio", "mp3", 25),
+            _download_ytdlp_audio(vidid),
+        )
     except Exception as e:
         print(f"[Youtube.download_song] {e}", flush=True)
         return None
 
 
 async def download_video(vidid: str) -> Optional[str]:
-    """Download video: API first, then yt-dlp if API returns audio-only."""
     try:
-        path = await _download_api(vidid, "video", "mp4", 150)
+        cached = cached_file(vidid, True)
+        if cached:
+            return cached
+        path = await _race_download(
+            _download_api(vidid, "video", "mp4", 40),
+            _download_ytdlp_video(vidid),
+        )
         if path and has_video_stream(path):
             return path
-
         if path:
-            print(
-                "[Youtube] API returned file without video — trying yt-dlp",
-                flush=True,
-            )
             _safe_remove(path)
-
-        path = await _download_ytdlp_video(vidid)
-        return path
+        return None
     except Exception as e:
         print(f"[Youtube.download_video] {e}", flush=True)
         return None
