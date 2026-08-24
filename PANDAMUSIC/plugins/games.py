@@ -16,14 +16,20 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .. import bot, cdx, rgx, console
+from ..modules.formatters import smallcaps
+from ..modules.custom_emojis import tg_emoji
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _DB = os.path.join(_BASE, "games_db.json")
 _RNG = secrets.SystemRandom()
 
-# Games menu buttons emoji (same as help menu inside)
+# Games menu buttons emoji
 E_GAMES = "6154314112236001069"
+# Games menu caption emojis
+E_GAMES_T1 = "6152030379340470754"
+E_GAMES_T2 = "6154418140638877189"
+E_GAMES_T3 = "6151949350487470820"
 
 SHOP = {
     "sword": {"price": 1500, "name": "🗡️ Sword", "atk": 15, "slot": "weapon"},
@@ -226,17 +232,22 @@ def games_back_markup():
     )
 
 
+def games_menu_caption() -> str:
+    body = (
+        f"{tg_emoji(E_GAMES_T1, '🎮')} {smallcaps('games menu')}\n\n"
+        f"{tg_emoji(E_GAMES_T2, '✨')} {smallcaps('pick a category below.')}\n"
+        f"{tg_emoji(E_GAMES_T3, '💰')} {smallcaps('all games use virtual coins — fun only, no real money.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
 # ── Menu callbacks ─────────────────────────────────────────────
 
 @bot.on_callback_query(rgx("games_menu"))
 async def games_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    text = (
-        "<b>🎮 GAMES MENU</b>\n\n"
-        "Pick a category below.\n"
-        "All games use virtual coins — fun only, no real money."
-    )
+    text = games_menu_caption()
     try:
         await query.message.edit_text(text, reply_markup=games_menu_markup(), parse_mode=ParseMode.HTML)
     except Exception:
