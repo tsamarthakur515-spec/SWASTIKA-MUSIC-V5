@@ -372,4 +372,84 @@ async def update_alert_cb(client, query):
 async def about_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    await _edit_menu(query,
+    await _edit_menu(query, about_caption(), about_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("help_menu"))
+async def help_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, help_list_caption(), help_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("music_menu"))
+async def music_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, music_list_caption(), music_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("tools_menu"))
+async def tools_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, tools_list_caption(), tools_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("moderation_menu"))
+async def moderation_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, moderation_list_caption(), moderation_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("chatbot_menu"))
+async def chatbot_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, chatbot_list_caption(), chatbot_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("locks_menu"))
+async def locks_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, locks_list_caption(), locks_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("fun_menu"))
+async def fun_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, fun_list_caption(), fun_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx(r"^cmdhelp\|"))
+async def cmd_help_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    try:
+        key = query.data.split("|", 1)[1].strip().lower()
+    except Exception:
+        return await query.answer("Invalid.", show_alert=True)
+    if key not in CMD_USAGE:
+        return await query.answer("Unknown command.", show_alert=True)
+    await _edit_menu(query, cmd_usage_caption(key), cmd_help_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("home_menu"))
+async def home_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    mention = query.from_user.mention if query.from_user else "User"
+    await _edit_menu(query, start_caption(mention), start_markup(client.me.username))
+    await query.answer()
