@@ -17,13 +17,12 @@ except Exception:
     _SUCCESS = "success"
     _DANGER = "danger"
 
-# Title emoji for welcome caption
 E_TITLE = "6111778259374971023"
-# /start menu buttons (except help and commands)
-E_START_HELP = "6147614817952735246"
-# ONLY "help and commands" button on /start
+# /start buttons (add group, owner, support, etc.)
+E_START = "6147614817952735246"
+# ONLY the "help and commands" button on /start
 E_HELP_AND_CMD = "6154314112236001069"
-# Inner command buttons (play, mute, etc.)
+# Help category menu (MUSIC/TOOLS/...) + inner cmds — pehle jaisa
 E_CMD_BTN = "5823571441118876120"
 
 
@@ -133,52 +132,53 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
     if owner:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E_START_HELP)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}", icon_custom_emoji_id=E_START)
     elif getattr(console, "OWNER_ID", 0):
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E_START_HELP)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"tg://user?id={console.OWNER_ID}", icon_custom_emoji_id=E_START)
     else:
-        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E_START_HELP)
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu", icon_custom_emoji_id=E_START)
     if support:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E_START_HELP)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}", icon_custom_emoji_id=E_START)
     else:
-        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E_START_HELP)
+        support_btn = _btn(smallcaps("support"), _SUCCESS, callback_data="support_alert", icon_custom_emoji_id=E_START)
     if channel:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E_START_HELP)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}", icon_custom_emoji_id=E_START)
     else:
-        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E_START_HELP)
+        update_btn = _btn(smallcaps("update"), _PRIMARY, callback_data="update_alert", icon_custom_emoji_id=E_START)
 
     add_url = add_group_url(bot_username)
 
     return InlineKeyboardMarkup([
-        [_btn(smallcaps("➕ add me in your group ➕"), _PRIMARY, url=add_url, icon_custom_emoji_id=E_START_HELP)],
-        [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START_HELP)],
-        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START_HELP)],
+        [_btn(smallcaps("➕ add me in your group ➕"), _PRIMARY, url=add_url, icon_custom_emoji_id=E_START)],
+        [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START)],
+        [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START)],
         [support_btn, update_btn],
-        # ONLY this button uses E_HELP_AND_CMD
+        # SIRF yeh button — 6154314112236001069
         [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_HELP_AND_CMD)],
-        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START_HELP)],
+        [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START)],
     ])
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
+    """MUSIC/TOOLS/... — purana emoji, naya wala nahi."""
     return InlineKeyboardMarkup([
         [
-            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_START_HELP),
-            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("TOOLS"), _SUCCESS, callback_data="tools_menu", icon_custom_emoji_id=E_CMD_BTN),
         ],
         [
-            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_START_HELP),
-            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("MODERATION"), _DANGER, callback_data="moderation_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("CHATBOT"), _SUCCESS, callback_data="chatbot_menu", icon_custom_emoji_id=E_CMD_BTN),
         ],
         [
-            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_START_HELP),
-            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("LOCKS"), _PRIMARY, callback_data="locks_menu", icon_custom_emoji_id=E_CMD_BTN),
+            _btn(smallcaps("GAMES"), _SUCCESS, callback_data="games_menu", icon_custom_emoji_id=E_CMD_BTN),
         ],
         [
-            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("FUN"), _PRIMARY, callback_data="fun_menu", icon_custom_emoji_id=E_CMD_BTN),
         ],
         [
-            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_START_HELP),
+            _btn(smallcaps("« BACK"), _DANGER, callback_data="home_menu", icon_custom_emoji_id=E_CMD_BTN),
         ],
     ])
 
