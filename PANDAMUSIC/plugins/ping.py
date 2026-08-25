@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# /ping — Bot Status with Premium Emojis & Colored Buttons
+# /ping — Bot Status with Premium Emojis & Colored Buttons + Image
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
 
 import time
+import asyncio
 from datetime import datetime
 
 from pyrogram import filters
@@ -86,12 +87,24 @@ def _btn(text: str, style=None, emoji_id: str = None, **kwargs) -> InlineKeyboar
 @bot.on_message(filters.command("ping"))
 async def ping_command(client, message: Message):
     """
-    /ping — Shows bot latency, version, uptime, database status
+    /ping — Shows bot latency, version, uptime, database status with image
+    
+    Flow:
+    1. Delete user's /ping command
+    2. Send "Pinging......" message
+    3. Send image with caption and buttons
+    4. Delete the "Pinging......" message
     """
     try:
-        # Initial message with pinging animation
-        initial_text = f"{tg_emoji(CE_PING_TITLE, '⚡')} ᴘɪɴɢɪɴɢ......"
-        msg = await message.reply(initial_text, parse_mode=ParseMode.HTML)
+        # Step 1: Delete user's /ping command message
+        await message.delete()
+        
+        # Step 2: Send pinging animation message
+        pinging_text = f"{tg_emoji(CE_PING_TITLE, '⚡')} ᴘɪɴɢɪɴɢ......"
+        pinging_msg = await message.reply(pinging_text, parse_mode=ParseMode.HTML)
+        
+        # Small delay for visual effect
+        await asyncio.sleep(1)
         
         # Calculate metrics
         bot_latency = round(client.latency * 1000)
@@ -99,16 +112,16 @@ async def ping_command(client, message: Message):
         database_status = "🟢 ᴄᴏɴɴᴇᴄᴛᴇᴅ"
         version = "v5.0.0"
         
-        # Create premium styled embed-like message
+        # Create premium styled caption
         caption = (
             f"{tg_emoji(CE_PING_TITLE, '⚡')} {smallcaps('ᴘɪɴɢ ᴘᴏɴɢ')}\n\n"
             f"{tg_emoji(CE_PING_VERSION, '⭐')} <b>ᴠᴇʀsɪᴏɴ</b> : <code>{version}</code>\n"
             f"{tg_emoji(CE_PING_MS, '✨')} <b>ᴍs</b> : <code>{bot_latency}ms</code>\n"
             f"{tg_emoji(CE_PING_UPTIME, '🔧')} <b>ᴜᴘᴛɪᴍᴇ</b> : <code>{uptime}</code>\n"
-            f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>ᴅᴀᴛᴀʙᴀsᴇ</b> : <code>{database_status}</code>\n"
+            f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>ᴅᴀᴛᴀʙᴀsᴇ</b> : <code>{database_status}</code>"
         )
         
-        # Create keyboard with danger button + owner button
+        # Create keyboard with buttons
         keyboard = InlineKeyboardMarkup(
             [
                 [
@@ -118,8 +131,20 @@ async def ping_command(client, message: Message):
             ]
         )
         
-        # Edit message with final response
-        await msg.edit(caption, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        # Step 3: Send image with caption and buttons
+        # Change this to your image path/URL
+        ping_image_url = "https://te.legra.ph/file/your-ping-image.jpg"  # Replace with your image
+        
+        await message.reply_photo(
+            photo=ping_image_url,
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard
+        )
+        
+        # Step 4: Delete the pinging message
+        await pinging_msg.delete()
+        
         console.log("[ping] /ping command executed successfully", style="green")
         
     except Exception as e:
