@@ -5,7 +5,6 @@
 print("[ping] loading plugin...", flush=True)
 
 import time
-import asyncio
 
 from pyrogram import filters
 from pyrogram.enums import ParseMode
@@ -32,6 +31,7 @@ except Exception:
     _PRIMARY = "primary"
     _DANGER = "danger"
 
+_log = console.logs(__name__)
 _BOT_START_TIME = time.time()
 
 
@@ -136,7 +136,7 @@ async def ping_command(client, message: Message):
                     parse_mode=ParseMode.HTML,
                 )
             except Exception as e:
-                console.log(f"[ping] photo failed: {e}", style="yellow")
+                _log.warning("[ping] photo failed: %s", e)
 
         if sent is None:
             try:
@@ -146,7 +146,7 @@ async def ping_command(client, message: Message):
                     parse_mode=ParseMode.HTML,
                 )
             except Exception as e:
-                console.log(f"[ping] cannot reply: {e}", style="red")
+                _log.error("[ping] cannot reply: %s", e)
                 return
 
         # Delete user's /ping command
@@ -155,10 +155,10 @@ async def ping_command(client, message: Message):
         except Exception:
             pass
 
-        console.log("[ping] ok", style="green")
+        _log.info("[ping] ok")
 
     except Exception as e:
-        console.log(f"[ping] error: {e}", style="red")
+        _log.error("[ping] error: %s", e)
         try:
             await message.reply_text(
                 f"{tg_emoji(CE_PING_DANGER, '❌')} Ping error: <code>{str(e)[:120]}</code>",
