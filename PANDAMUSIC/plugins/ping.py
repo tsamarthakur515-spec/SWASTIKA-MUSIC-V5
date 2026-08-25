@@ -36,6 +36,9 @@ except Exception:
 
 _BOT_START_TIME = time.time()
 
+# Default ping image (override via Config.env PING_IMAGE_URL)
+_DEFAULT_PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
+
 
 def _get_uptime() -> str:
     elapsed = int(time.time() - _BOT_START_TIME)
@@ -169,6 +172,15 @@ def _assistant_count() -> int:
         return 1 if getattr(console, "STRING1", None) else 0
 
 
+def _ping_photo() -> Optional[str]:
+    """Dedicated ping image → stats → start fallback."""
+    for key in ("PING_IMAGE_URL", "STATS_IMAGE_URL", "START_IMAGE_URL"):
+        url = getattr(console, key, None)
+        if url and str(url).startswith("http"):
+            return str(url)
+    return _DEFAULT_PING_IMAGE
+
+
 async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
     me = getattr(client, "me", None)
     if me is None:
@@ -199,9 +211,7 @@ async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
 async def ping_command(client, message: Message):
     print("[ping] command received", flush=True)
 
-    photo = getattr(console, "STATS_IMAGE_URL", None) or getattr(
-        console, "START_IMAGE_URL", None
-    )
+    photo = _ping_photo()
 
     try:
         await message.delete()
