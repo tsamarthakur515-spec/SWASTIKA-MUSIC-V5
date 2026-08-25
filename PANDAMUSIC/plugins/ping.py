@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# image + ᴘɪɴɢɪɴɢ... → delete → final photo+caption+owner button
-# (kurigram: edit_caption with reply_markup breaks KeyboardButtonUrl)
+# Smooth single reply (same pattern as /stats /start)
+# No loading → delete → resend flicker
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -33,10 +33,6 @@ except Exception:
     _SUCCESS = "success"
 
 _BOT_START_TIME = time.time()
-
-_PINGING_CAPTION = (
-    f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>{smallcaps('pinging')}...</b>"
-)
 
 
 def _get_uptime() -> str:
@@ -99,13 +95,10 @@ def _ping_keyboard() -> InlineKeyboardMarkup:
 
 
 async def _get_latency(client) -> int:
-    async def _measure() -> int:
-        t0 = time.perf_counter()
-        await client.get_me()
-        return int(round((time.perf_counter() - t0) * 1000))
-
     try:
-        return await asyncio.wait_for(_measure(), timeout=2.0)
+        t0 = time.perf_counter()
+        await asyncio.wait_for(client.get_me(), timeout=1.5)
+        return int(round((time.perf_counter() - t0) * 1000))
     except Exception as e:
         print(f"[ping] latency skip: {e}", flush=True)
         return 0
@@ -134,103 +127,57 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
-    # 1) Loading message (NO keyboard — avoids kurigram edit+kb bug)
-    status = None
-    if photo:
-        try:
-            status = await message.reply_photo(
-                photo=photo,
-                caption=_PINGING_CAPTION,
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception as e:
-            print(f"[ping] photo failed: {e}", flush=True)
-
-    if status is None:
-        try:
-            status = await message.reply_text(
-                _PINGING_CAPTION, parse_mode=ParseMode.HTML
-            )
-        except Exception as e:
-            print(f"[ping] text failed: {e}", flush=True)
-            return
-
-    # 2) Measure
+    # Measure first — no loading message (smooth)
     ms = await _get_latency(client)
     uptime = _get_uptime()
     final = _final_caption(ms, uptime)
     keyboard = _ping_keyboard()
-    chat_id = status.chat.id
 
-    # 3) Delete loading → send FINAL with keyboard (same path as /stats /start)
+    # Single clean reply (same style as /stats)
     try:
-        await status.delete()
-    except Exception as e:
-        print(f"[ping] delete loading: {e}", flush=True)
-
-    sent = False
-
-    if photo:
-        try:
-            await client.send_photo(
-                chat_id,
+        if photo:
+            await message.reply_photo(
                 photo=photo,
                 caption=final,
                 reply_markup=keyboard,
                 parse_mode=ParseMode.HTML,
             )
-            sent = True
-        except Exception as e:
-            print(f"[ping] send_photo+kb: {e}", flush=True)
-            # try without style/emoji keyboard
-            try:
-                plain_kb = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]]
-                )
-                await client.send_photo(
-                    chat_id,
-                    photo=photo,
-                    caption=final,
-                    reply_markup=plain_kb,
-                    parse_mode=ParseMode.HTML,
-                )
-                sent = True
-            except Exception as e2:
-                print(f"[ping] send_photo plain kb: {e2}", flush=True)
-                try:
-                    await client.send_photo(
-                        chat_id,
-                        photo=photo,
-                        caption=final,
-                        parse_mode=ParseMode.HTML,
-                    )
-                    sent = True
-                except Exception as e3:
-                    print(f"[ping] send_photo no kb: {e3}", flush=True)
+        else:
+            await message.reply_text(
+                final, reply_markup=keyboard, parse_mode=ParseMode.HTML
+            )
+        print(f"[ping] ok ms={ms}", flush=True)
+        return
+    except Exception as e:
+        print(f"[ping] photo+kb failed: {e}", flush=True)
 
-    if not sent:
-        try:
-            await client.send_message(
-                chat_id,
-                final,
-                reply_markup=keyboard,
+    # Fallback: plain button (no style / custom emoji)
+    try:
+        plain_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]]
+        )
+        if photo:
+            await message.reply_photo(
+                photo=photo,
+                caption=final,
+                reply_markup=plain_kb,
                 parse_mode=ParseMode.HTML,
             )
-            sent = True
-        except Exception as e:
-            print(f"[ping] send_message+kb: {e}", flush=True)
-            try:
-                await client.send_message(
-                    chat_id,
-                    final + f"\n\n⭐ <a href=\"{_owner_url()}\">{smallcaps('owner')}</a>",
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
-                )
-                sent = True
-            except Exception as e2:
-                print(f"[ping] send_message plain: {e2}", flush=True)
+        else:
+            await message.reply_text(
+                final, reply_markup=plain_kb, parse_mode=ParseMode.HTML
+            )
+        print(f"[ping] ok (plain kb) ms={ms}", flush=True)
+        return
+    except Exception as e2:
+        print(f"[ping] plain kb failed: {e2}", flush=True)
 
-    print(f"[ping] ok={sent} ms={ms}", flush=True)
+    # Last fallback: text only
+    try:
+        await message.reply_text(final, parse_mode=ParseMode.HTML)
+        print(f"[ping] ok (text only) ms={ms}", flush=True)
+    except Exception as e3:
+        print(f"[ping] text failed: {e3}", flush=True)
 
 
 print("[ping] plugin loaded OK", flush=True)
