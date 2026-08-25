@@ -2,6 +2,7 @@ from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
 from ..modules.formatters import smallcaps
 from ..modules.custom_emojis import E, tg_emoji
+from ..modules.bot_api import bot_api_send_photo, bot_api_send_message
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 import asyncio
@@ -311,34 +312,45 @@ async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
 
 
 async def _safe_reply(message, photo, caption, buttons):
-    """Always deliver start message — even if kurigram KeyboardButtonUrl is broken."""
-    # 1) photo + buttons
+    """Photo + ALL buttons. Kurigram broken → Bot API HTTP (buttons still show)."""
+    chat_id = message.chat.id
+
+    # 1) Normal pyrogram path
     if photo:
         try:
             return await message.reply_photo(
                 photo=photo, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            print(f"[start] photo+kb failed: {e}", flush=True)
+            print(f"[start] pyrogram photo+kb: {e}", flush=True)
 
-    # 2) text + buttons
     try:
         return await message.reply_text(
             caption, reply_markup=buttons, parse_mode=ParseMode.HTML
         )
     except Exception as e:
-        print(f"[start] text+kb failed: {e}", flush=True)
+        print(f"[start] pyrogram text+kb: {e}", flush=True)
 
-    # 3) photo NO buttons (KeyboardButtonUrl broken on this install)
+    # 2) Bot API — same buttons, bypasses broken KeyboardButtonUrl
+    print("[start] using Bot API fallback for buttons", flush=True)
+    if photo:
+        ok = await bot_api_send_photo(
+            chat_id, photo=photo, caption=caption, reply_markup=buttons
+        )
+        if ok:
+            return True
+    ok = await bot_api_send_message(chat_id, text=caption, reply_markup=buttons)
+    if ok:
+        return True
+
+    # 3) Last resort — no buttons
     if photo:
         try:
             return await message.reply_photo(
                 photo=photo, caption=caption, parse_mode=ParseMode.HTML
             )
-        except Exception as e:
-            print(f"[start] photo no-kb failed: {e}", flush=True)
-
-    # 4) text NO buttons — last resort
+        except Exception:
+            pass
     return await message.reply_text(caption, parse_mode=ParseMode.HTML)
 
 
