@@ -1,18 +1,11 @@
 """
 PANDAMUSIC — PostgreSQL Database Layer (asyncpg)
 
-TABLE_PREFIX — har bot ka apna prefix:
-  SHIVU  bot  → pmv2_     (default, Config.env mein kuch set nahi karna)
-  RADHIKA bot → radhika_  (Config.env mein TABLE_PREFIX=radhika_ likhna)
-
-Isse ek hi Supabase DB pe dono bots ke data bilkul alag rahenge.
-
-DB OPTIONAL: agar DB_HOST/DB_USER missing ho ya connection fail ho,
-to bot bina DB ke bhi chalega (in-memory fallback).
-Served users/chats always tracked in-memory too so broadcast works
-even when DB is down or tables are still empty this session.
+TABLE_PREFIX — har bot ka apna prefix.
+DB OPTIONAL: connection fail pe bot in-memory mode me chalta hai.
 """
 
+import asyncio
 import random
 from typing import List, Optional, Set
 
@@ -25,73 +18,109 @@ log = console.logs(__name__)
 _pool: Optional[asyncpg.Pool] = None
 assistantdict = {}
 
-# In-memory fallback (and session cache) — broadcast works even if DB is offline
 _mem_users: Set[int] = set()
 _mem_chats: Set[int] = set()
 
-# Table names — Config.env ke TABLE_PREFIX se bante hain
-_P = console.TABLE_PREFIX          # "pmv2_" ya "radhika_"
+_P = console.TABLE_PREFIX
 
-T_ASSISTANTS  = f"{_P}assistants"
-T_USERS       = f"{_P}served_users"
-T_CHATS       = f"{_P}served_chats"
+T_ASSISTANTS = f"{_P}assistants"
+T_USERS = f"{_P}served_users"
+T_CHATS = f"{_P}served_chats"
 T_ADMINS_ONLY = f"{_P}admins_only"
-T_SUDOERS     = f"{_P}sudoers"
+T_SUDOERS = f"{_P}sudoers"
+
+
+async def _try_pool(host: str, port: int, user: str, password: str, database: str):
+    """Create pool for one host:port. Raises on failure."""
+    return await asyncpg.create_pool(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        min_size=1,
+        max_size=8,
+        command_timeout=30,
+        timeout=15,
+        ssl="require",
+        statement_cache_size=0,
+    )
 
 
 async def init_db():
-    """Connect to PostgreSQL if configured. Failures are non-fatal (DB optional)."""
+    """Connect to PostgreSQL. Tries configured port then 5432/6543 fallbacks."""
     global _pool
-    try:
-        host     = (console.DB_HOST     or "").strip().strip('"').strip("'")
-        user     = (console.DB_USER     or "").strip().strip('"').strip("'")
-        password = (console.DB_PASSWORD or "").strip().strip('"').strip("'")
-        database = (console.DB_NAME     or "postgres").strip().strip('"').strip("'")
-        port     = int(getattr(console, "DB_PORT", 6543) or 6543)
+    _pool = None
 
-        if not host or not user:
-            log.warning(
-                "⚠️ DB_HOST / DB_USER missing — running WITHOUT database (in-memory only)."
-            )
-            _pool = None
-            return
+    host = (console.DB_HOST or "").strip().strip('"').strip("'")
+    user = (console.DB_USER or "").strip().strip('"').strip("'")
+    password = (console.DB_PASSWORD or "").strip().strip('"').strip("'")
+    database = (console.DB_NAME or "postgres").strip().strip('"').strip("'") or "postgres"
+    cfg_port = int(getattr(console, "DB_PORT", 5432) or 5432)
 
-        _pool = await asyncpg.create_pool(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=database,
-            min_size=2,
-            max_size=10,
-            command_timeout=30,
-            ssl="require",
-            statement_cache_size=0,
+    if not host or not user:
+        log.warning(
+            "⚠️ DB_HOST / DB_USER missing — running WITHOUT database (in-memory only)."
         )
-        await _create_tables()
-        # Warm memory cache from DB so /stats and broadcast see existing data
+        return
+
+    # Prefer config port, then common Supabase ports
+    ports = []
+    for p in (cfg_port, 5432, 6543):
+        if p not in ports:
+            ports.append(p)
+
+    last_err = None
+    for port in ports:
         try:
+            log.info(f"🔄 DB connecting → {host}:{port} user={user} db={database}")
+            _pool = await _try_pool(host, port, user, password, database)
+            # quick health check
             async with _pool.acquire() as conn:
-                urows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
-                crows = await conn.fetch(f"SELECT chat_id FROM {T_CHATS} WHERE chat_id < 0")
-            for r in urows:
-                _mem_users.add(int(r["user_id"]))
-            for r in crows:
-                _mem_chats.add(int(r["chat_id"]))
-            log.info(
-                f"✅ Cache warmed — users={len(_mem_users)} chats={len(_mem_chats)}"
-            )
+                await conn.fetchval("SELECT 1")
+            log.info(f"✅ PostgreSQL connected ({host}:{port}, prefix='{_P}')")
+            break
         except Exception as e:
-            log.warning(f"⚠️ Cache warm failed: {e}")
-        log.info(f"✅ PostgreSQL connected (prefix='{_P}')")
+            last_err = e
+            log.warning(f"⚠️ DB {host}:{port} failed: {type(e).__name__}: {e}")
+            if _pool is not None:
+                try:
+                    await _pool.close()
+                except Exception:
+                    pass
+            _pool = None
+
+    if _pool is None:
+        log.warning(
+            f"⚠️ DB connection failed (last: {last_err}) — "
+            "running WITHOUT database (in-memory only).\n"
+            "  → Supabase dashboard me project Unpause / Restore karo\n"
+            "  → Settings → Database se naya host/password copy karke Config.env update karo"
+        )
+        return
+
+    try:
+        await _create_tables()
     except Exception as e:
-        log.warning(f"⚠️ DB connection failed: {e} — running WITHOUT database (in-memory only).")
-        _pool = None
+        log.warning(f"⚠️ Table create failed: {e}")
+
+    try:
+        async with _pool.acquire() as conn:
+            urows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
+            crows = await conn.fetch(f"SELECT chat_id FROM {T_CHATS} WHERE chat_id < 0")
+        for r in urows:
+            _mem_users.add(int(r["user_id"]))
+        for r in crows:
+            _mem_chats.add(int(r["chat_id"]))
+        log.info(f"✅ Cache warmed — users={len(_mem_users)} chats={len(_mem_chats)}")
+    except Exception as e:
+        log.warning(f"⚠️ Cache warm failed: {e}")
 
 
 async def _create_tables():
     async with _pool.acquire() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE TABLE IF NOT EXISTS {T_ASSISTANTS} (
                 chat_id   BIGINT PRIMARY KEY,
                 assistant INT    NOT NULL
@@ -116,7 +145,8 @@ async def _create_tables():
                 id      TEXT     PRIMARY KEY DEFAULT 'sudo',
                 sudoers BIGINT[] DEFAULT '{{}}'
             );
-        """)
+        """
+        )
     log.info(f"✅ Tables ready — prefix '{_P}'")
 
 
@@ -126,12 +156,14 @@ def _ok() -> bool:
 
 async def get_client(assistant: int):
     from .. import app
+
     mapping = {1: app.one, 2: app.two, 3: app.three, 4: app.four, 5: app.five}
     return mapping.get(int(assistant))
 
 
 async def set_assistant(chat_id: int):
     from .clients import assistants
+
     ran = random.choice(assistants)
     assistantdict[chat_id] = ran
     if _ok():
@@ -139,13 +171,15 @@ async def set_assistant(chat_id: int):
             await conn.execute(
                 f"""INSERT INTO {T_ASSISTANTS}(chat_id, assistant) VALUES($1, $2)
                    ON CONFLICT(chat_id) DO UPDATE SET assistant=EXCLUDED.assistant""",
-                chat_id, ran,
+                chat_id,
+                ran,
             )
     return await get_client(ran)
 
 
 async def get_assistant(chat_id: int):
     from .clients import assistants
+
     assistant = assistantdict.get(chat_id)
     if not assistant:
         if _ok():
@@ -164,6 +198,7 @@ async def get_assistant(chat_id: int):
 
 async def set_calls_assistant(chat_id: int) -> int:
     from .clients import assistants
+
     ran = random.choice(assistants)
     assistantdict[chat_id] = ran
     if _ok():
@@ -171,13 +206,15 @@ async def set_calls_assistant(chat_id: int) -> int:
             await conn.execute(
                 f"""INSERT INTO {T_ASSISTANTS}(chat_id, assistant) VALUES($1, $2)
                    ON CONFLICT(chat_id) DO UPDATE SET assistant=EXCLUDED.assistant""",
-                chat_id, ran,
+                chat_id,
+                ran,
             )
     return ran
 
 
 async def group_assistant(self, chat_id: int):
     from .clients import assistants
+
     assistant = assistantdict.get(chat_id)
     if not assistant:
         if _ok():
@@ -233,12 +270,13 @@ async def add_served_user(user_id: int):
 
 
 async def get_served_users() -> list:
-    # Prefer DB when available, always merge with memory so nothing is lost this session
     ids: Set[int] = set(_mem_users)
     if _ok():
         try:
             async with _pool.acquire() as conn:
-                rows = await conn.fetch(f"SELECT user_id FROM {T_USERS} WHERE user_id > 0")
+                rows = await conn.fetch(
+                    f"SELECT user_id FROM {T_USERS} WHERE user_id > 0"
+                )
             for r in rows:
                 uid = int(r["user_id"])
                 ids.add(uid)
@@ -273,7 +311,6 @@ async def is_served_chat(chat_id: int) -> bool:
 async def add_served_chat(chat_id: int):
     if not chat_id:
         return
-    # Only track groups/channels (negative ids) for broadcast targets
     cid = int(chat_id)
     if cid < 0:
         _mem_chats.add(cid)
@@ -330,7 +367,8 @@ async def set_admins_only(chat_id: int, value: bool) -> bool:
         await conn.execute(
             f"""INSERT INTO {T_ADMINS_ONLY}(chat_id, value) VALUES($1, $2)
                ON CONFLICT(chat_id) DO UPDATE SET value=EXCLUDED.value""",
-            chat_id, bool(value),
+            chat_id,
+            bool(value),
         )
     return bool(value)
 
