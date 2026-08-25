@@ -110,6 +110,10 @@ STATS_IMAGE_URL = _env_str(
     "STATS_IMAGE_URL",
     "https://files.catbox.moe/bf1vcn.jpg",
 ) or "https://files.catbox.moe/bf1vcn.jpg"
+PING_IMAGE_URL = _env_str(
+    "PING_IMAGE_URL",
+    "https://files.catbox.moe/wfqfeh.jpg",
+) or "https://files.catbox.moe/wfqfeh.jpg"
 OWNER_USERNAME = _env_str("OWNER_USERNAME", "").lstrip("@")
 SUPPORT_CHAT = _env_str("SUPPORT_CHAT", "").lstrip("@")
 SUPPORT_CHANNEL = _env_str("SUPPORT_CHANNEL", "").lstrip("@")
