@@ -1,10 +1,11 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# image + ᴘɪɴɢɪɴɢ... → edit final caption | premium emojis | smallcaps
+# image + ᴘɪɴɢɪɴɢ... → edit final | premium emojis | smallcaps
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
 
+import asyncio
 import time
 
 from pyrogram import filters
@@ -37,7 +38,6 @@ except Exception:
 
 _BOT_START_TIME = time.time()
 
-# Loading caption (smallcaps style)
 _PINGING_CAPTION = (
     f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>{smallcaps('pinging')}...</b>"
 )
@@ -81,21 +81,21 @@ def _btn(text, style=None, emoji_id=None, **kwargs):
 
 
 async def _get_latency(client) -> int:
-    try:
-        val = await client.ping
-        return int(round(float(val) * 1000))
-    except Exception:
-        pass
-    try:
-        t0 = time.time()
+    """Fast latency — never hang more than ~2s."""
+
+    async def _measure() -> int:
+        t0 = time.perf_counter()
         await client.get_me()
-        return int(round((time.time() - t0) * 1000))
-    except Exception:
+        return int(round((time.perf_counter() - t0) * 1000))
+
+    try:
+        return await asyncio.wait_for(_measure(), timeout=2.0)
+    except Exception as e:
+        print(f"[ping] latency skip: {e}", flush=True)
         return 0
 
 
 def _final_caption(ms: int, uptime: str) -> str:
-    """Final menu caption — premium emojis + smallcaps."""
     return (
         f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>{smallcaps('ping pong')}</b>\n\n"
         f"{tg_emoji(CE_PING_VERSION, '⭐')} <b>{smallcaps('version')}</b> : <code>v5.0.0</code>\n"
@@ -118,7 +118,6 @@ def _ping_keyboard() -> InlineKeyboardMarkup:
                     emoji_id=CE_PING_DANGER,
                     callback_data="ping_action",
                 ),
-                # SUCCESS style + star premium emoji from custom_emojis.py
                 _btn(
                     smallcaps("owner"),
                     style=_SUCCESS,
@@ -130,6 +129,71 @@ def _ping_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+async def _edit_final(status, final: str, keyboard: InlineKeyboardMarkup):
+    """Always try hard to leave PINGING... state."""
+    # photo message → edit_caption
+    try:
+        await status.edit_caption(
+            caption=final,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+        )
+        return True
+    except Exception as e:
+        print(f"[ping] edit_caption: {e}", flush=True)
+
+    # text message → edit_text
+    try:
+        await status.edit_text(
+            final,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+        )
+        return True
+    except Exception as e:
+        print(f"[ping] edit_text: {e}", flush=True)
+
+    # caption without keyboard
+    try:
+        await status.edit_caption(caption=final, parse_mode=ParseMode.HTML)
+        return True
+    except Exception as e:
+        print(f"[ping] edit_caption no-kb: {e}", flush=True)
+
+    # last: delete stuck msg + new reply
+    try:
+        chat_id = status.chat.id
+        await status.delete()
+    except Exception:
+        chat_id = None
+
+    try:
+        if chat_id is not None:
+            await bot.send_photo(
+                chat_id,
+                photo=getattr(console, "STATS_IMAGE_URL", None)
+                or getattr(console, "START_IMAGE_URL", ""),
+                caption=final,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await status.reply_text(
+                final, reply_markup=keyboard, parse_mode=ParseMode.HTML
+            )
+        return True
+    except Exception as e:
+        print(f"[ping] resend failed: {e}", flush=True)
+        try:
+            await status.reply_text(
+                f"⚡ {smallcaps('ping pong')}\n"
+                f"✨ ms: {final[-80:]}"
+            )
+        except Exception:
+            pass
+        return False
+
+
 @bot.on_message(cdx("ping") & filters.incoming)
 async def ping_command(client, message: Message):
     print("[ping] command received", flush=True)
@@ -138,15 +202,14 @@ async def ping_command(client, message: Message):
         console, "START_IMAGE_URL", None
     )
 
-    # Delete user /ping command
+    # Delete user /ping
     try:
         await message.delete()
     except Exception:
         pass
 
+    # 1) Image + PINGING...
     status = None
-
-    # 1) Send image + ᴘɪɴɢɪɴɢ... caption
     if photo:
         try:
             status = await message.reply_photo(
@@ -155,58 +218,26 @@ async def ping_command(client, message: Message):
                 parse_mode=ParseMode.HTML,
             )
         except Exception as e:
-            print(f"[ping] photo+pinging failed: {e}", flush=True)
+            print(f"[ping] photo failed: {e}", flush=True)
 
     if status is None:
         try:
             status = await message.reply_text(
-                _PINGING_CAPTION,
-                parse_mode=ParseMode.HTML,
+                _PINGING_CAPTION, parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            print(f"[ping] text+pinging failed: {e}", flush=True)
-            try:
-                status = await message.reply_text(smallcaps("pinging") + "...")
-            except Exception as e2:
-                print(f"[ping] plain pinging failed: {e2}", flush=True)
-                return
+            print(f"[ping] text failed: {e}", flush=True)
+            return
 
-    # 2) Measure
-    ms = 0
-    uptime = "0s"
-    try:
-        ms = await _get_latency(client)
-        uptime = _get_uptime()
-    except Exception as e:
-        print(f"[ping] latency error: {e}", flush=True)
-
+    # 2) Latency (max 2s — never stuck)
+    ms = await _get_latency(client)
+    uptime = _get_uptime()
     final = _final_caption(ms, uptime)
     keyboard = _ping_keyboard()
 
-    # 3) Edit caption → final menu
-    try:
-        await status.edit_caption(
-            caption=final,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception:
-        try:
-            await status.edit_text(
-                final,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception as e:
-            print(f"[ping] edit final failed: {e}", flush=True)
-            try:
-                await message.reply_text(
-                    final, reply_markup=keyboard, parse_mode=ParseMode.HTML
-                )
-            except Exception as e2:
-                print(f"[ping] final reply failed: {e2}", flush=True)
-
-    print("[ping] ok", flush=True)
+    # 3) MUST leave PINGING...
+    ok = await _edit_final(status, final, keyboard)
+    print(f"[ping] ok={ok} ms={ms}", flush=True)
 
 
 print("[ping] plugin loaded OK", flush=True)
