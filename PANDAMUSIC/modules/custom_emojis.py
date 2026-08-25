@@ -55,7 +55,8 @@ class E:
 
 
 def tg_emoji(emoji_id: str, fallback: str = "✨") -> str:
-    return f"<tg-emoji emoji-id='{emoji_id}'>{fallback}</tg-emoji>"
+    # double quotes — required for Telegram Bot API HTML parser
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 
 CE_PLAY = E.PLAY_BTN
