@@ -1,21 +1,20 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Image always attaches · each line separate quote
+# Short clean ping · important lines only · channel on powered by
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
 
 import asyncio
 import io
-import platform
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from .. import bot, call, console, cdx
+from .. import bot, console, cdx
 from ..modules.custom_emojis import tg_emoji, CE_CLOSE
 from ..modules.formatters import smallcaps
 
@@ -31,22 +30,13 @@ except Exception:
     _DANGER = "danger"
 
 try:
-    import psutil
-except Exception:
-    psutil = None
-
-try:
-    import pyrogram as _pyrogram
-except Exception:
-    _pyrogram = None
-
-try:
     import aiohttp
 except Exception:
     aiohttp = None
 
 CE_PING = "6111504695728020416"
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
+CHANNEL_URL = "https://t.me/Swastika_update"
 _VERSION = "v5.0.0"
 
 _PHOTO_BYTES: Optional[bytes] = None
@@ -57,7 +47,6 @@ def em(fallback: str = "⚡") -> str:
 
 
 def q(line: str) -> str:
-    """One line = one quote block."""
     return f"<blockquote>{line}</blockquote>"
 
 
@@ -135,13 +124,13 @@ def _support_url() -> Optional[str]:
     return f"https://t.me/{chat}"
 
 
-def _channel_url() -> Optional[str]:
+def _channel_url() -> str:
     ch = (getattr(console, "SUPPORT_CHANNEL", None) or "").lstrip("@")
-    if not ch:
-        return None
-    if ch.startswith("http"):
-        return ch
-    return f"https://t.me/{ch}"
+    if ch:
+        if ch.startswith("http"):
+            return ch
+        return f"https://t.me/{ch}"
+    return CHANNEL_URL
 
 
 def _ping_keyboard() -> InlineKeyboardMarkup:
@@ -154,15 +143,15 @@ def _ping_keyboard() -> InlineKeyboardMarkup:
             _btn(smallcaps("support"), style=_PRIMARY, emoji_id=CE_PING, url=support)
         )
     rows = [row1]
-    channel = _channel_url()
-    row2 = []
-    if channel:
-        row2.append(
-            _btn(smallcaps("updates"), style=_PRIMARY, emoji_id=CE_PING, url=channel)
-        )
-    row2.append(
-        _btn(smallcaps("close"), style=_DANGER, emoji_id=CE_CLOSE, callback_data="close")
-    )
+    row2 = [
+        _btn(
+            smallcaps("updates"),
+            style=_PRIMARY,
+            emoji_id=CE_PING,
+            url=_channel_url(),
+        ),
+        _btn(smallcaps("close"), style=_DANGER, emoji_id=CE_CLOSE, callback_data="close"),
+    ]
     rows.append(row2)
     return InlineKeyboardMarkup(rows)
 
@@ -188,55 +177,6 @@ async def _db_status() -> str:
         return "🟢 Connected"
     except Exception:
         return "🔴 Error"
-
-
-async def _served_counts() -> Tuple[int, int]:
-    try:
-        from ..modules.database import count_served_users, count_served_chats
-
-        users, chats = await asyncio.gather(
-            count_served_users(), count_served_chats()
-        )
-        return int(users or 0), int(chats or 0)
-    except Exception:
-        return 0, 0
-
-
-def _active_vc_count() -> int:
-    try:
-        return len(getattr(call, "active_chats", []) or [])
-    except Exception:
-        return 0
-
-
-def _assistant_count() -> int:
-    try:
-        from ..modules.clients import assistants
-
-        return len(assistants) or (1 if getattr(console, "STRING1", None) else 0)
-    except Exception:
-        return 1 if getattr(console, "STRING1", None) else 0
-
-
-def _ram_text() -> str:
-    if not psutil:
-        return "—"
-    try:
-        vm = psutil.virtual_memory()
-        used = vm.used / (1024 ** 3)
-        total = vm.total / (1024 ** 3)
-        return f"{used:.1f}/{total:.1f} GiB ({vm.percent}%)"
-    except Exception:
-        return "—"
-
-
-def _cpu_text() -> str:
-    if not psutil:
-        return "—"
-    try:
-        return f"{psutil.cpu_percent(interval=None)}%"
-    except Exception:
-        return "—"
 
 
 def _ping_photo_url() -> str:
@@ -273,14 +213,7 @@ async def _load_photo() -> Union[str, io.BytesIO]:
     return url
 
 
-async def _build_caption(
-    client,
-    ms: int,
-    uptime: str,
-    db: str,
-    users: int,
-    chats: int,
-) -> str:
+async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
     me = getattr(client, "me", None)
     if me is None:
         try:
@@ -289,15 +222,10 @@ async def _build_caption(
             me = None
     uname = (getattr(me, "username", None) or "Swastika_musics_bot").lstrip("@")
     label = _latency_label(ms)
-    active = _active_vc_count()
-    assistants_n = _assistant_count()
     ms_text = f"{ms}ms" if ms > 0 else "—"
-    ram = _ram_text()
-    cpu = _cpu_text()
-    plat = platform.system() or "Linux"
-    pyro_ver = getattr(_pyrogram, "__version__", "N/A") if _pyrogram else "N/A"
+    channel = _channel_url()
 
-    # Each line = own quote (cleaner look)
+    # Only important lines
     lines = [
         q(f"{em()} <b>Swastika Music v5</b>"),
         q(f"{em()} <b>@{uname}</b> — SYSTEM LIVE"),
@@ -305,15 +233,9 @@ async def _build_caption(
         q(f"{em()} <b>LATENCY</b> : <code>{ms_text}</code> · {label}"),
         q(f"{em()} <b>UPTIME</b> : <code>{uptime}</code>"),
         q(f"{em()} <b>DATABASE</b> : <code>{db}</code>"),
-        q(f"{em()} <b>ACTIVE VC</b> : <code>{active}</code>"),
-        q(f"{em()} <b>ASSISTANTS</b> : <code>{assistants_n}</code>"),
-        q(f"{em()} <b>USERS</b> : <code>{users}</code>"),
-        q(f"{em()} <b>CHATS</b> : <code>{chats}</code>"),
-        q(f"{em()} <b>RAM</b> : <code>{ram}</code>"),
-        q(f"{em()} <b>CPU</b> : <code>{cpu}</code>"),
-        q(f"{em()} <b>OS</b> : <code>{plat}</code>"),
-        q(f"{em()} <b>PYROGRAM</b> : <code>{pyro_ver}</code>"),
-        q(f"{em()} <i>POWERED BY SWASTIKA MUSIC</i>"),
+        q(
+            f'{em()} <a href="{channel}"><b>POWERED BY SWASTIKA MUSIC</b></a>'
+        ),
     ]
     return "\n".join(lines)
 
@@ -330,16 +252,11 @@ async def ping_command(client, message: Message):
         pass
 
     photo_task = asyncio.create_task(_load_photo())
-    ms, db, counts = await asyncio.gather(
-        _get_latency(client),
-        _db_status(),
-        _served_counts(),
-    )
-    users, chats = counts
+    ms, db = await asyncio.gather(_get_latency(client), _db_status())
     photo = await photo_task
 
     uptime = _get_uptime()
-    final = await _build_caption(client, ms, uptime, db, users, chats)
+    final = await _build_caption(client, ms, uptime, db)
     keyboard = _ping_keyboard()
 
     try:
@@ -360,15 +277,17 @@ async def ping_command(client, message: Message):
         support = _support_url()
         if support:
             plain_row1.append(InlineKeyboardButton("Support", url=support))
-        plain_row2 = [InlineKeyboardButton("Close", callback_data="close")]
-        channel = _channel_url()
-        if channel:
-            plain_row2.insert(0, InlineKeyboardButton("Updates", url=channel))
-        plain_kb = InlineKeyboardMarkup([plain_row1, plain_row2])
-
+        plain_kb = InlineKeyboardMarkup(
+            [
+                plain_row1,
+                [
+                    InlineKeyboardButton("Updates", url=_channel_url()),
+                    InlineKeyboardButton("Close", callback_data="close"),
+                ],
+            ]
+        )
         if isinstance(photo, io.BytesIO):
             photo.seek(0)
-
         await client.send_photo(
             chat_id=chat_id,
             photo=photo,
