@@ -6,6 +6,7 @@ from ..modules.bot_api import bot_api_send_photo, bot_api_send_message
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 import asyncio
+import html as html_lib
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -227,13 +228,21 @@ def about_markup() -> InlineKeyboardMarkup:
     ]])
 
 
+def _safe_mention(user) -> str:
+    """Plain HTML mention — no custom-emoji-in-name (breaks Bot API parser)."""
+    if not user:
+        return "User"
+    name = html_lib.escape(user.first_name or "User")
+    return f'<a href="tg://user?id={user.id}">{name}</a>'
+
+
 def start_caption(mention: str) -> str:
     return (
-        f"{tg_emoji(E_TITLE, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n"
-        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('hey')} {mention}\n\n"
-        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('i am a high quality fast music bot.')}\n"
-        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('add me to your group and enjoy audio / video streaming.')}\n\n"
-        f"{tg_emoji(E_TITLE, '✨')} {smallcaps('use the buttons below for help, owner and support.')}"
+        f'{tg_emoji(E_TITLE, "✨")} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n\n'
+        f'{tg_emoji(E_TITLE, "✨")} {smallcaps("hey")} {mention}\n\n'
+        f'{tg_emoji(E_TITLE, "✨")} {smallcaps("i am a high quality fast music bot.")}\n'
+        f'{tg_emoji(E_TITLE, "✨")} {smallcaps("add me to your group and enjoy audio / video streaming.")}\n\n'
+        f'{tg_emoji(E_TITLE, "✨")} {smallcaps("use the buttons below for help, owner and support.")}'
     )
 
 
@@ -249,23 +258,23 @@ def help_list_caption() -> str:
         f"• games — economy rpg social\n"
         f"• fun — couple riddle dice slots coinflip"
     )
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.GEAR, '⚙️')} {body}</blockquote>"
 
 
 def music_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.LIGHTNING}'>⚡</tg-emoji> {smallcaps('music commands')}\n\n{smallcaps('audio and video streaming controls.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.LIGHTNING, '⚡')} {smallcaps('music commands')}\n\n{smallcaps('audio and video streaming controls.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def tools_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {smallcaps('tools')}\n\n{smallcaps('stats, active chats, welcome and broadcast.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.GEAR, '⚙️')} {smallcaps('tools')}\n\n{smallcaps('stats, active chats, welcome and broadcast.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def moderation_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.FIRE}'>🔥</tg-emoji> {smallcaps('moderation')}\n\n{smallcaps('mute ban kick tagall and abuse filter.')}\n{smallcaps('admin only for most commands.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.FIRE, '🔥')} {smallcaps('moderation')}\n\n{smallcaps('mute ban kick tagall and abuse filter.')}\n{smallcaps('admin only for most commands.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def chatbot_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.LIGHTNING}'>⚡</tg-emoji> {smallcaps('chatbot commands')}\n\n{smallcaps('enable or disable ai chat in this chat.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.LIGHTNING, '⚡')} {smallcaps('chatbot commands')}\n\n{smallcaps('enable or disable ai chat in this chat.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def locks_list_caption() -> str:
@@ -279,20 +288,20 @@ def locks_list_caption() -> str:
         f"invitelink phone email emoji media\n\n"
         f"{smallcaps('admin owner sudo only. bot needs delete messages right.')}"
     )
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.GEAR}'>⚙️</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.GEAR, '⚙️')} {body}</blockquote>"
 
 
 def fun_list_caption() -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.BUTTERFLY}'>🦋</tg-emoji> {smallcaps('fun')}\n\n{smallcaps('couple of the day, riddles, dice, slots and coinflip.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.BUTTERFLY, '🦋')} {smallcaps('fun')}\n\n{smallcaps('couple of the day, riddles, dice, slots and coinflip.')}\n{smallcaps('tap a button to see usage.')}</blockquote>"
 
 
 def cmd_usage_caption(key: str) -> str:
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.STAR}'>🌟</tg-emoji> {CMD_USAGE.get(key, smallcaps('unknown command'))}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.STAR, '🌟')} {CMD_USAGE.get(key, smallcaps('unknown command'))}</blockquote>"
 
 
 def about_caption() -> str:
     body = f"{smallcaps('about')}\n\n{smallcaps('high quality telegram music bot.')}\n{smallcaps('supports audio and video streaming.')}\n{smallcaps('powered by pytgcalls + kurigram.')}\n\n{smallcaps('add me in your group and start playing.')}"
-    return f"<blockquote expandable><tg-emoji emoji-id='{E.CHECK}'>✅</tg-emoji> {body}</blockquote>"
+    return f"<blockquote expandable>{tg_emoji(E.CHECK, '✅')} {body}</blockquote>"
 
 
 async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
@@ -312,10 +321,9 @@ async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
 
 
 async def _safe_reply(message, photo, caption, buttons):
-    """Photo + ALL buttons. Kurigram broken → Bot API HTTP (buttons still show)."""
+    """Photo + ALL buttons. Kurigram broken → Bot API HTTP."""
     chat_id = message.chat.id
 
-    # 1) Normal pyrogram path
     if photo:
         try:
             return await message.reply_photo(
@@ -331,19 +339,19 @@ async def _safe_reply(message, photo, caption, buttons):
     except Exception as e:
         print(f"[start] pyrogram text+kb: {e}", flush=True)
 
-    # 2) Bot API — same buttons, bypasses broken KeyboardButtonUrl
     print("[start] using Bot API fallback for buttons", flush=True)
     if photo:
         ok = await bot_api_send_photo(
             chat_id, photo=photo, caption=caption, reply_markup=buttons
         )
         if ok:
+            print("[start] Bot API photo+buttons OK", flush=True)
             return True
     ok = await bot_api_send_message(chat_id, text=caption, reply_markup=buttons)
     if ok:
+        print("[start] Bot API text+buttons OK", flush=True)
         return True
 
-    # 3) Last resort — no buttons
     if photo:
         try:
             return await message.reply_photo(
@@ -368,7 +376,7 @@ async def start_message_private(client, message):
     if is_start:
         try:
             sticker_msg = await message.reply(
-                text=f"<tg-emoji emoji-id='{E_START_STICKER}'>⭐</tg-emoji>",
+                text=f'<tg-emoji emoji-id="{E_START_STICKER}">⭐</tg-emoji>',
                 parse_mode=ParseMode.HTML,
             )
             await asyncio.sleep(1.3)
@@ -376,7 +384,8 @@ async def start_message_private(client, message):
         except Exception:
             pass
 
-    mention = message.from_user.mention if message.from_user else "User"
+    # safe mention (premium name emojis break Bot API HTML)
+    mention = _safe_mention(message.from_user)
     photo = console.START_IMAGE_URL
     caption = start_caption(mention)
     buttons = start_markup(client.me.username)
@@ -394,8 +403,7 @@ async def start_message_private(client, message):
             full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
             username = f"@{message.from_user.username}" if message.from_user.username else "N/A"
             user_id = message.from_user.id
-            mention = message.from_user.mention
-            log_message = f"🚀 **{mention} Just Started the Bot!**\n\n🧑 **Full Name:** {full_name}\n🔗 **Username:** {username}\n🆔 **Telegram ID:** `{user_id}`"
+            log_message = f"🚀 **{message.from_user.mention} Just Started the Bot!**\n\n🧑 **Full Name:** {full_name}\n🔗 **Username:** {username}\n🆔 **Telegram ID:** `{user_id}`"
             await client.send_message(console.LOG_GROUP_ID, text=log_message, disable_web_page_preview=True)
         except Exception:
             pass
@@ -504,6 +512,6 @@ async def cmd_help_cb(client, query):
 async def home_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    mention = query.from_user.mention if query.from_user else "User"
+    mention = _safe_mention(query.from_user)
     await _edit_menu(query, start_caption(mention), start_markup(client.me.username))
     await query.answer()
