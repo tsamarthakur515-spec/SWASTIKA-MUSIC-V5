@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Loading emoji → final photo · smallcaps · clean quotes
+# Loading emoji → final photo · smallcaps · custom status badges
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -34,8 +34,15 @@ try:
 except Exception:
     aiohttp = None
 
+# Line icon
 CE_PING = "6111504695728020416"
+# Loading
 CE_LOAD = "6089090515540644835"
+# Extra badges (user provided)
+CE_OK = "6154273803967929315"      # excellent / online
+CE_GOOD = "6154678544506034045"    # good
+CE_WARN = "6152468036507934048"    # average / offline
+CE_BAD = "5823633434676827622"     # slow / error
 
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
 CHANNEL_URL = "https://t.me/Swastika_update"
@@ -44,8 +51,8 @@ _VERSION = "v5.0.0"
 _PHOTO_BYTES: Optional[bytes] = None
 
 
-def em(fallback: str = "⚡") -> str:
-    return tg_emoji(CE_PING, fallback)
+def em(emoji_id: str = CE_PING, fallback: str = "⚡") -> str:
+    return tg_emoji(emoji_id, fallback)
 
 
 def load_em(fallback: str = "✨") -> str:
@@ -78,14 +85,14 @@ def _get_uptime() -> str:
 
 def _latency_label(ms: int) -> str:
     if ms <= 0:
-        return "N/A"
+        return f"{em(CE_WARN, '⚪')} N/A"
     if ms < 80:
-        return "🟢 Excellent"
+        return f"{em(CE_OK, '🟢')} Excellent"
     if ms < 150:
-        return "🟡 Good"
+        return f"{em(CE_GOOD, '🟡')} Good"
     if ms < 300:
-        return "🟠 Average"
-    return "🔴 Slow"
+        return f"{em(CE_WARN, '🟠')} Average"
+    return f"{em(CE_BAD, '🔴')} Slow"
 
 
 def _btn(text, style=None, emoji_id=None, **kwargs):
@@ -173,17 +180,16 @@ async def _get_latency(client) -> int:
 
 
 async def _db_status() -> str:
-    """Plain ASCII only — smallcaps was showing as □□□ boxes."""
     try:
         from ..modules.database import _ok, _pool
 
         if not _ok() or _pool is None:
-            return "⚪ Offline"
+            return f"{em(CE_WARN, '⚪')} Offline"
         async with _pool.acquire() as conn:
             await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=1.0)
-        return "🟢 Online"
+        return f"{em(CE_OK, '🟢')} Online"
     except Exception:
-        return "🔴 Error"
+        return f"{em(CE_BAD, '🔴')} Error"
 
 
 def _ping_photo_url() -> str:
@@ -232,7 +238,6 @@ async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
     ms_text = f"{ms}ms" if ms > 0 else "—"
     channel = _channel_url()
 
-    # Labels smallcaps; values plain (readable on all devices)
     lines = [
         q(f"{em()} <b>{smallcaps('swastika music v5')}</b>"),
         q(f"{em()} <b>@{uname}</b> — {smallcaps('system live')}"),
