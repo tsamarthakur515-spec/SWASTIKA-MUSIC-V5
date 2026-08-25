@@ -19,13 +19,9 @@ except Exception:
     _DANGER = "danger"
 
 E_TITLE = "6111778259374971023"
-# /start — SAARI buttons (help and commands bhi)
 E_START = "6147614817952735246"
-# Help menu ANDAR (MUSIC, TOOLS, MODERATION, ...)
 E_HELP_INSIDE = "6154314112236001069"
-# Play / mute / andar command buttons — same as pehle
 E_CMD_BTN = "5823571441118876120"
-# /start pehle aane wala emoji sticker
 E_START_STICKER = "6154300385520522693"
 
 
@@ -131,7 +127,6 @@ def _back_row():
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
-    """/start — SAARI buttons purple 614761 (help and commands bhi)."""
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
@@ -157,14 +152,12 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
         [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START)],
         [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START)],
         [support_btn, update_btn],
-        # bhi purple — same E_START
         [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_START)],
         [_btn(smallcaps("source"), _DANGER, callback_data="repo_alert", icon_custom_emoji_id=E_START)],
     ])
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
-    """Help ANDAR — MUSIC/TOOLS/... = 615431."""
     return InlineKeyboardMarkup([
         [
             _btn(smallcaps("MUSIC"), _PRIMARY, callback_data="music_menu", icon_custom_emoji_id=E_HELP_INSIDE),
@@ -308,7 +301,45 @@ async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
         try:
             await query.message.edit_caption(caption=caption, reply_markup=markup, parse_mode=ParseMode.HTML)
         except Exception:
-            pass
+            try:
+                await query.message.edit_text(caption, parse_mode=ParseMode.HTML)
+            except Exception:
+                try:
+                    await query.message.edit_caption(caption=caption, parse_mode=ParseMode.HTML)
+                except Exception:
+                    pass
+
+
+async def _safe_reply(message, photo, caption, buttons):
+    """Always deliver start message — even if kurigram KeyboardButtonUrl is broken."""
+    # 1) photo + buttons
+    if photo:
+        try:
+            return await message.reply_photo(
+                photo=photo, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            print(f"[start] photo+kb failed: {e}", flush=True)
+
+    # 2) text + buttons
+    try:
+        return await message.reply_text(
+            caption, reply_markup=buttons, parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        print(f"[start] text+kb failed: {e}", flush=True)
+
+    # 3) photo NO buttons (KeyboardButtonUrl broken on this install)
+    if photo:
+        try:
+            return await message.reply_photo(
+                photo=photo, caption=caption, parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            print(f"[start] photo no-kb failed: {e}", flush=True)
+
+    # 4) text NO buttons — last resort
+    return await message.reply_text(caption, parse_mode=ParseMode.HTML)
 
 
 @bot.on_message(cdx(["start", "help"]))
@@ -322,7 +353,6 @@ async def start_message_private(client, message):
 
     is_start = message.command and message.command[0].lower() == "start"
 
-    # /start pehle emoji sticker bhejo → delete → phir main message
     if is_start:
         try:
             sticker_msg = await message.reply(
@@ -341,10 +371,11 @@ async def start_message_private(client, message):
     if message.command and message.command[0].lower() == "help":
         caption = help_list_caption()
         buttons = help_menu_markup()
+
     try:
-        await message.reply_photo(photo=photo, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
-    except Exception:
-        await message.reply_text(caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
+        await _safe_reply(message, photo, caption, buttons)
+    except Exception as e:
+        print(f"[start] all reply paths failed: {e}", flush=True)
 
     if is_start:
         try:
