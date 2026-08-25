@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Image always attaches (send_photo, not reply after delete)
+# Image always attaches · each line separate quote
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -49,12 +49,16 @@ CE_PING = "6111504695728020416"
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
 _VERSION = "v5.0.0"
 
-# Cache downloaded image bytes so Telegram always gets a real file
 _PHOTO_BYTES: Optional[bytes] = None
 
 
 def em(fallback: str = "⚡") -> str:
     return tg_emoji(CE_PING, fallback)
+
+
+def q(line: str) -> str:
+    """One line = one quote block."""
+    return f"<blockquote>{line}</blockquote>"
 
 
 def _boot_ts() -> float:
@@ -243,7 +247,6 @@ def _ping_photo_url() -> str:
 
 
 async def _load_photo() -> Union[str, io.BytesIO]:
-    """URL first; if Telegram cannot fetch it, download bytes ourselves."""
     global _PHOTO_BYTES
     url = _ping_photo_url()
 
@@ -294,24 +297,25 @@ async def _build_caption(
     plat = platform.system() or "Linux"
     pyro_ver = getattr(_pyrogram, "__version__", "N/A") if _pyrogram else "N/A"
 
-    body = (
-        f"{em()} <b>Swastika Music v5</b>\n"
-        f"{em()} <b>@{uname}</b> — SYSTEM LIVE\n\n"
-        f"{em()} <b>VERSION</b> : <code>{_VERSION}</code>\n"
-        f"{em()} <b>LATENCY</b> : <code>{ms_text}</code> · {label}\n"
-        f"{em()} <b>UPTIME</b> : <code>{uptime}</code>\n"
-        f"{em()} <b>DATABASE</b> : <code>{db}</code>\n\n"
-        f"{em()} <b>ACTIVE VC</b> : <code>{active}</code>\n"
-        f"{em()} <b>ASSISTANTS</b> : <code>{assistants_n}</code>\n"
-        f"{em()} <b>USERS</b> : <code>{users}</code>\n"
-        f"{em()} <b>CHATS</b> : <code>{chats}</code>\n\n"
-        f"{em()} <b>RAM</b> : <code>{ram}</code>\n"
-        f"{em()} <b>CPU</b> : <code>{cpu}</code>\n"
-        f"{em()} <b>OS</b> : <code>{plat}</code>\n"
-        f"{em()} <b>PYROGRAM</b> : <code>{pyro_ver}</code>\n\n"
-        f"{em()} <i>POWERED BY SWASTIKA MUSIC</i>"
-    )
-    return f"<blockquote expandable>{body}</blockquote>"
+    # Each line = own quote (cleaner look)
+    lines = [
+        q(f"{em()} <b>Swastika Music v5</b>"),
+        q(f"{em()} <b>@{uname}</b> — SYSTEM LIVE"),
+        q(f"{em()} <b>VERSION</b> : <code>{_VERSION}</code>"),
+        q(f"{em()} <b>LATENCY</b> : <code>{ms_text}</code> · {label}"),
+        q(f"{em()} <b>UPTIME</b> : <code>{uptime}</code>"),
+        q(f"{em()} <b>DATABASE</b> : <code>{db}</code>"),
+        q(f"{em()} <b>ACTIVE VC</b> : <code>{active}</code>"),
+        q(f"{em()} <b>ASSISTANTS</b> : <code>{assistants_n}</code>"),
+        q(f"{em()} <b>USERS</b> : <code>{users}</code>"),
+        q(f"{em()} <b>CHATS</b> : <code>{chats}</code>"),
+        q(f"{em()} <b>RAM</b> : <code>{ram}</code>"),
+        q(f"{em()} <b>CPU</b> : <code>{cpu}</code>"),
+        q(f"{em()} <b>OS</b> : <code>{plat}</code>"),
+        q(f"{em()} <b>PYROGRAM</b> : <code>{pyro_ver}</code>"),
+        q(f"{em()} <i>POWERED BY SWASTIKA MUSIC</i>"),
+    ]
+    return "\n".join(lines)
 
 
 @bot.on_message(cdx("ping") & filters.incoming)
@@ -338,7 +342,6 @@ async def ping_command(client, message: Message):
     final = await _build_caption(client, ms, uptime, db, users, chats)
     keyboard = _ping_keyboard()
 
-    # IMPORTANT: use send_photo(chat_id=...) — reply_photo after delete often fails
     try:
         await client.send_photo(
             chat_id=chat_id,
@@ -352,7 +355,6 @@ async def ping_command(client, message: Message):
     except Exception as e:
         print(f"[ping] send_photo+kb failed: {e}", flush=True)
 
-    # Retry with plain keyboard
     try:
         plain_row1 = [InlineKeyboardButton("Owner", url=_owner_url())]
         support = _support_url()
@@ -364,7 +366,6 @@ async def ping_command(client, message: Message):
             plain_row2.insert(0, InlineKeyboardButton("Updates", url=channel))
         plain_kb = InlineKeyboardMarkup([plain_row1, plain_row2])
 
-        # Reset BytesIO cursor if needed
         if isinstance(photo, io.BytesIO):
             photo.seek(0)
 
@@ -380,7 +381,6 @@ async def ping_command(client, message: Message):
     except Exception as e2:
         print(f"[ping] plain photo failed: {e2}", flush=True)
 
-    # Last: photo without keyboard, then text
     try:
         if isinstance(photo, io.BytesIO):
             photo.seek(0)
