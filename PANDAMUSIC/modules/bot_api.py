@@ -1,5 +1,5 @@
 """
-Telegram Bot API helpers — bypass broken kurigram KeyboardButtonUrl / Callback write().
+Telegram Bot API helpers — bypass broken kurigram KeyboardButtonUrl / Callback.
 """
 
 from __future__ import annotations
@@ -43,21 +43,17 @@ def markup_to_api(markup) -> Optional[dict]:
 
 
 def fix_html_for_bot_api(text: str) -> str:
-    """Bot API is stricter than pyrogram HTML."""
     if not text:
         return text
-    # tg-emoji: single quotes → double quotes
     text = re.sub(
         r"<tg-emoji\s+emoji-id='([^']+)'>",
         r'<tg-emoji emoji-id="\1">',
         text,
     )
-    # bare < > that break parser (keep valid tags)
     return text
 
 
 def strip_html(text: str) -> str:
-    """Plain text fallback."""
     if not text:
         return text
     text = re.sub(r"<tg-emoji[^>]*>|</tg-emoji>", "", text)
@@ -94,7 +90,6 @@ async def bot_api_send_photo(
     api_markup = markup_to_api(reply_markup)
     markup_json = json.dumps(api_markup) if api_markup else None
 
-    # try 1: fixed HTML
     payload: dict[str, Any] = {
         "chat_id": chat_id,
         "photo": photo,
@@ -106,7 +101,6 @@ async def bot_api_send_photo(
     if await _post("sendPhoto", payload):
         return True
 
-    # try 2: plain caption + buttons
     payload2: dict[str, Any] = {
         "chat_id": chat_id,
         "photo": photo,
@@ -114,11 +108,7 @@ async def bot_api_send_photo(
     }
     if markup_json:
         payload2["reply_markup"] = markup_json
-    if await _post("sendPhoto", payload2):
-        return True
-
-    # try 3: buttons only message if photo keeps failing
-    return False
+    return await _post("sendPhoto", payload2)
 
 
 async def bot_api_send_message(
@@ -150,3 +140,61 @@ async def bot_api_send_message(
     if markup_json:
         payload2["reply_markup"] = markup_json
     return await _post("sendMessage", payload2)
+
+
+async def bot_api_edit_message(
+    chat_id: int,
+    message_id: int,
+    text: str = "",
+    caption: str = "",
+    reply_markup=None,
+    is_photo: bool = False,
+    parse_mode: str = "HTML",
+) -> bool:
+    """Edit caption (photo msg) or text — used for /start menu buttons."""
+    api_markup = markup_to_api(reply_markup)
+    markup_json = json.dumps(api_markup) if api_markup else None
+
+    if is_photo or caption:
+        body = fix_html_for_bot_api(caption or text)
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "caption": body,
+            "parse_mode": parse_mode,
+        }
+        if markup_json:
+            payload["reply_markup"] = markup_json
+        if await _post("editMessageCaption", payload):
+            return True
+        # plain caption
+        payload["caption"] = strip_html(body)[:1024]
+        payload.pop("parse_mode", None)
+        if await _post("editMessageCaption", payload):
+            return True
+
+    body = fix_html_for_bot_api(text or caption)
+    payload2: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": body,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": "true",
+    }
+    if markup_json:
+        payload2["reply_markup"] = markup_json
+    if await _post("editMessageText", payload2):
+        return True
+
+    payload2["text"] = strip_html(body)[:4096]
+    payload2.pop("parse_mode", None)
+    return await _post("editMessageText", payload2)
+
+
+async def bot_api_answer_callback(callback_query_id: str, text: str = "", show_alert: bool = False) -> bool:
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text[:200]
+    if show_alert:
+        payload["show_alert"] = "true"
+    return await _post("answerCallbackQuery", payload)
