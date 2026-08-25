@@ -4,6 +4,7 @@ from ..modules.formatters import smallcaps
 from ..modules.custom_emojis import E, tg_emoji
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
+import asyncio
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -24,6 +25,8 @@ E_START = "6147614817952735246"
 E_HELP_INSIDE = "6154314112236001069"
 # Play / mute / andar command buttons — same as pehle
 E_CMD_BTN = "5823571441118876120"
+# /start pehle aane wala emoji sticker
+E_START_STICKER = "6154300385520522693"
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -316,6 +319,21 @@ async def start_message_private(client, message):
         await add_served_user(message.from_user.id)
     except Exception:
         pass
+
+    is_start = message.command and message.command[0].lower() == "start"
+
+    # /start pehle emoji sticker bhejo → delete → phir main message
+    if is_start:
+        try:
+            sticker_msg = await message.reply(
+                text=f"<tg-emoji emoji-id='{E_START_STICKER}'>⭐</tg-emoji>",
+                parse_mode=ParseMode.HTML,
+            )
+            await asyncio.sleep(1.3)
+            await sticker_msg.delete()
+        except Exception:
+            pass
+
     mention = message.from_user.mention if message.from_user else "User"
     photo = console.START_IMAGE_URL
     caption = start_caption(mention)
@@ -327,7 +345,8 @@ async def start_message_private(client, message):
         await message.reply_photo(photo=photo, caption=caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
     except Exception:
         await message.reply_text(caption, reply_markup=buttons, parse_mode=ParseMode.HTML)
-    if message.command and message.command[0].lower() == "start":
+
+    if is_start:
         try:
             full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
             username = f"@{message.from_user.username}" if message.from_user.username else "N/A"
