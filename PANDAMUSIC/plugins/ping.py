@@ -7,6 +7,7 @@ print("[ping] loading plugin...", flush=True)
 
 import asyncio
 import time
+from typing import Optional
 
 from pyrogram import filters
 from pyrogram.enums import ParseMode
@@ -95,15 +96,14 @@ def _owner_url() -> str:
     return "https://t.me/tsamarthakur515"
 
 
-def _support_url() -> str | None:
-    chat = (getattr(console, "SUPPORT_CHAT", None) or "").lstrip("@").lstrip("+")
+def _support_url() -> Optional[str]:
+    chat = (getattr(console, "SUPPORT_CHAT", None) or "").lstrip("@")
     if not chat:
         return None
     if chat.startswith("http"):
         return chat
-    # invite hash or username
-    if len(chat) > 20 or chat.startswith("+"):
-        return f"https://t.me/{chat if chat.startswith('+') else '+' + chat}"
+    if chat.startswith("+"):
+        return f"https://t.me/{chat}"
     return f"https://t.me/{chat}"
 
 
@@ -208,7 +208,7 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
-    # Parallel: latency + DB check
+    # Parallel: latency + DB check (faster)
     ms_task = asyncio.create_task(_get_latency(client))
     db_task = asyncio.create_task(_db_status())
     ms, db = await asyncio.gather(ms_task, db_task)
