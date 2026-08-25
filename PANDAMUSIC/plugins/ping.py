@@ -34,9 +34,7 @@ try:
 except Exception:
     aiohttp = None
 
-# Caption / button emoji
 CE_PING = "6111504695728020416"
-# Loading “sticker” custom emoji
 CE_LOAD = "6089090515540644835"
 
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
@@ -80,14 +78,14 @@ def _get_uptime() -> str:
 
 def _latency_label(ms: int) -> str:
     if ms <= 0:
-        return smallcaps("n/a")
+        return "N/A"
     if ms < 80:
-        return f"🟢 {smallcaps('excellent')}"
+        return "🟢 Excellent"
     if ms < 150:
-        return f"🟡 {smallcaps('good')}"
+        return "🟡 Good"
     if ms < 300:
-        return f"🟠 {smallcaps('average')}"
-    return f"🔴 {smallcaps('slow')}"
+        return "🟠 Average"
+    return "🔴 Slow"
 
 
 def _btn(text, style=None, emoji_id=None, **kwargs):
@@ -175,16 +173,17 @@ async def _get_latency(client) -> int:
 
 
 async def _db_status() -> str:
+    """Plain ASCII only — smallcaps was showing as □□□ boxes."""
     try:
         from ..modules.database import _ok, _pool
 
         if not _ok() or _pool is None:
-            return f"⚪ {smallcaps('offline')} ({smallcaps('memory mode')})"
+            return "⚪ Offline"
         async with _pool.acquire() as conn:
             await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=1.0)
-        return f"🟢 {smallcaps('connected')}"
+        return "🟢 Online"
     except Exception:
-        return f"🔴 {smallcaps('error')}"
+        return "🔴 Error"
 
 
 def _ping_photo_url() -> str:
@@ -233,13 +232,14 @@ async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
     ms_text = f"{ms}ms" if ms > 0 else "—"
     channel = _channel_url()
 
+    # Labels smallcaps; values plain (readable on all devices)
     lines = [
         q(f"{em()} <b>{smallcaps('swastika music v5')}</b>"),
         q(f"{em()} <b>@{uname}</b> — {smallcaps('system live')}"),
         q(f"{em()} <b>{smallcaps('version')}</b> : <code>{_VERSION}</code>"),
         q(f"{em()} <b>{smallcaps('latency')}</b> : <code>{ms_text}</code> · {label}"),
         q(f"{em()} <b>{smallcaps('uptime')}</b> : <code>{uptime}</code>"),
-        q(f"{em()} <b>{smallcaps('database')}</b> : <code>{db}</code>"),
+        q(f"{em()} <b>{smallcaps('status')}</b> : {db}"),
         q(
             f'{em()} <a href="{channel}"><b>{smallcaps("powered by swastika music")}</b></a>'
         ),
@@ -258,7 +258,6 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
-    # ── 1) Loading bubble (premium emoji + ping......) ──────────
     loading = None
     try:
         loading = await client.send_message(
@@ -272,7 +271,6 @@ async def ping_command(client, message: Message):
     except Exception as e:
         print(f"[ping] loading send fail: {e}", flush=True)
 
-    # ── 2) Measure + download image while user sees loading ─────
     t0 = time.perf_counter()
     photo_task = asyncio.create_task(_load_photo())
     ms_task = asyncio.create_task(_get_latency(client))
@@ -280,13 +278,11 @@ async def ping_command(client, message: Message):
 
     ms, db, photo = await asyncio.gather(ms_task, db_task, photo_task)
 
-    # Keep loading visible ~1.0–1.5s total (premium feel)
     elapsed = time.perf_counter() - t0
     wait_more = max(0.0, 1.25 - elapsed)
     if wait_more:
         await asyncio.sleep(wait_more)
 
-    # ── 3) Remove loading ───────────────────────────────────────
     if loading is not None:
         try:
             await loading.delete()
@@ -297,7 +293,6 @@ async def ping_command(client, message: Message):
     final = await _build_caption(client, ms, uptime, db)
     keyboard = _ping_keyboard()
 
-    # ── 4) Final photo result ───────────────────────────────────
     try:
         await client.send_photo(
             chat_id=chat_id,
