@@ -2,6 +2,9 @@ import asyncio
 import os
 import sys
 
+# MUST run before any pyrogram message/callback parse
+from .modules import kurigram_patch  # noqa: F401
+
 import pyrogram
 
 from . import app, bot, call, console
