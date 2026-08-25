@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# SWASTIKA MUSIC — ping.py  (stable)
+# SWASTIKA MUSIC — ping.py  (stable + premium emojis + image)
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -12,7 +12,16 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .. import bot, console
-from ..modules.custom_emojis import E, tg_emoji, CE_PING_TITLE, CE_PING_VERSION, CE_PING_MS, CE_PING_UPTIME, CE_PING_DATABASE, CE_PING_DANGER
+from ..modules.custom_emojis import (
+    E,
+    tg_emoji,
+    CE_PING_TITLE,
+    CE_PING_VERSION,
+    CE_PING_MS,
+    CE_PING_UPTIME,
+    CE_PING_DATABASE,
+    CE_PING_DANGER,
+)
 from ..modules.formatters import smallcaps
 
 try:
@@ -71,44 +80,76 @@ async def _get_latency(client) -> int:
         return 0
 
 
-@bot.on_message(filters.command("ping") & \~filters.forwarded)
-async def ping_command(client, message: Message):
-    # 1) Pehle plain reply — isse hamesha kuch dikhega
-    try:
-        status = await message.reply_text("⚡ ᴘɪɴɢɪɴɢ......")
-    except Exception as e:
-        console.log(f"[ping] cannot reply: {e}", style="red")
-        return
+def _ping_caption(ms: int, uptime: str) -> str:
+    """Premium emoji caption (menu style)."""
+    body = (
+        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>{smallcaps('ping pong')}</b>\n\n"
+        f"{tg_emoji(CE_PING_VERSION, '⭐')} <b>{smallcaps('version')}</b> : <code>v5.0.0</code>\n"
+        f"{tg_emoji(CE_PING_MS, '✨')} <b>{smallcaps('ms')}</b> : <code>{ms}ms</code>\n"
+        f"{tg_emoji(CE_PING_UPTIME, '🔧')} <b>{smallcaps('uptime')}</b> : <code>{uptime}</code>\n"
+        f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>{smallcaps('database')}</b> : <code>🟢 {smallcaps('connected')}</code>"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
 
+
+def _ping_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(
+                    smallcaps("action"),
+                    style=_DANGER,
+                    emoji_id=CE_PING_DANGER,
+                    callback_data="ping_action",
+                ),
+                _btn(
+                    smallcaps("owner"),
+                    style=_PRIMARY,
+                    emoji_id=E.STAR,
+                    url="https://t.me/tsamarthakur515",
+                ),
+            ]
+        ]
+    )
+
+
+@bot.on_message(filters.command("ping") & ~filters.forwarded)
+async def ping_command(client, message: Message):
+    # Measure first — no "pinging..." status message
     try:
-        await asyncio.sleep(0.3)
         ms = await _get_latency(client)
         uptime = _get_uptime()
-
-        caption = (
-            f"⚡ **ᴘɪɴɢ ᴘᴏɴɢ**\n\n"
-            f"⭐ **ᴠᴇʀsɪᴏɴ** : `v5.0.0`\n"
-            f"✨ **ᴍs** : `{ms}ms`\n"
-            f"🔧 **ᴜᴘᴛɪᴍᴇ** : `{uptime}`\n"
-            f"⚙️ **ᴅᴀᴛᴀʙᴀsᴇ** : `🟢 ᴄᴏɴɴᴇᴄᴛᴇᴅ`"
+        caption = _ping_caption(ms, uptime)
+        keyboard = _ping_keyboard()
+        photo = getattr(console, "STATS_IMAGE_URL", None) or getattr(
+            console, "START_IMAGE_URL", None
         )
 
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    _btn("⚠️ ᴀᴄᴛɪᴏɴ", style=_DANGER, callback_data="ping_action"),
-                    _btn("👑 ᴏᴡɴᴇʀ", style=_PRIMARY, url="https://t.me/tsamarthakur515"),
-                ]
-            ]
-        )
+        # Prefer photo reply (image + caption + buttons)
+        sent = None
+        if photo:
+            try:
+                sent = await message.reply_photo(
+                    photo=photo,
+                    caption=caption,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                console.log(f"[ping] photo failed: {e}", style="yellow")
 
-        # 2) Same message edit karo (photo skip — hang nahi hoga)
-        try:
-            await status.edit_text(caption, reply_markup=keyboard)
-        except Exception:
-            await status.edit_text(caption)
+        if sent is None:
+            try:
+                sent = await message.reply_text(
+                    caption,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                console.log(f"[ping] cannot reply: {e}", style="red")
+                return
 
-        # 3) User ka /ping delete (optional)
+        # Delete user's /ping command
         try:
             await message.delete()
         except Exception:
@@ -119,6 +160,9 @@ async def ping_command(client, message: Message):
     except Exception as e:
         console.log(f"[ping] error: {e}", style="red")
         try:
-            await status.edit_text(f"❌ Ping error: `{str(e)[:120]}`")
+            await message.reply_text(
+                f"{tg_emoji(CE_PING_DANGER, '❌')} Ping error: <code>{str(e)[:120]}</code>",
+                parse_mode=ParseMode.HTML,
+            )
         except Exception:
             pass
