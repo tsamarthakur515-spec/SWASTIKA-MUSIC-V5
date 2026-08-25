@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# image + ᴘɪɴɢɪɴɢ... → edit final | premium emojis | smallcaps
+# image + ᴘɪɴɢɪɴɢ... → edit final | premium emojis | owner SUCCESS star
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -21,20 +21,15 @@ from ..modules.custom_emojis import (
     CE_PING_MS,
     CE_PING_UPTIME,
     CE_PING_DATABASE,
-    CE_PING_DANGER,
 )
 from ..modules.formatters import smallcaps
 
 try:
     from pyrogram.enums import ButtonStyle
 
-    _PRIMARY = ButtonStyle.PRIMARY
     _SUCCESS = ButtonStyle.SUCCESS
-    _DANGER = ButtonStyle.DANGER
 except Exception:
-    _PRIMARY = "primary"
     _SUCCESS = "success"
-    _DANGER = "danger"
 
 _BOT_START_TIME = time.time()
 
@@ -59,30 +54,42 @@ def _get_uptime() -> str:
     return " ".join(parts)
 
 
-def _btn(text, style=None, emoji_id=None, **kwargs):
-    if emoji_id:
-        kwargs["icon_custom_emoji_id"] = str(emoji_id)
-    if style is not None:
+def _owner_button() -> InlineKeyboardButton:
+    """SUCCESS color + premium star (E.STAR) + owner URL."""
+    owner = (getattr(console, "OWNER_USERNAME", None) or "").lstrip("@")
+    owner_url = f"https://t.me/{owner}" if owner else "https://t.me/tsamarthakur515"
+    text = smallcaps("owner")
+    star_id = str(E.STAR)
+
+    # 1) SUCCESS + custom emoji icon
+    for style in (_SUCCESS, "success", None):
+        kwargs = {"url": owner_url, "icon_custom_emoji_id": star_id}
         try:
-            return InlineKeyboardButton(text, style=style, **kwargs)
+            if style is not None:
+                return InlineKeyboardButton(text, style=style, **kwargs)
+            return InlineKeyboardButton(text, **kwargs)
         except TypeError:
-            pass
-        try:
-            return InlineKeyboardButton(
-                text, style=str(getattr(style, "name", style)).lower(), **kwargs
-            )
-        except TypeError:
-            pass
+            continue
+        except Exception:
+            continue
+
+    # 2) URL + emoji only (no style)
     try:
-        return InlineKeyboardButton(text, **kwargs)
+        return InlineKeyboardButton(
+            text, url=owner_url, icon_custom_emoji_id=star_id
+        )
     except TypeError:
-        kwargs.pop("icon_custom_emoji_id", None)
-        return InlineKeyboardButton(text, **kwargs)
+        pass
+
+    # 3) Plain URL fallback
+    return InlineKeyboardButton(f"⭐ {text}", url=owner_url)
+
+
+def _ping_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[_owner_button()]])
 
 
 async def _get_latency(client) -> int:
-    """Fast latency — never hang more than ~2s."""
-
     async def _measure() -> int:
         t0 = time.perf_counter()
         await client.get_me()
@@ -105,33 +112,7 @@ def _final_caption(ms: int, uptime: str) -> str:
     )
 
 
-def _ping_keyboard() -> InlineKeyboardMarkup:
-    owner = (getattr(console, "OWNER_USERNAME", None) or "").lstrip("@")
-    owner_url = f"https://t.me/{owner}" if owner else "https://t.me/tsamarthakur515"
-
-    return InlineKeyboardMarkup(
-        [
-            [
-                _btn(
-                    smallcaps("action"),
-                    style=_DANGER,
-                    emoji_id=CE_PING_DANGER,
-                    callback_data="ping_action",
-                ),
-                _btn(
-                    smallcaps("owner"),
-                    style=_SUCCESS,
-                    emoji_id=E.STAR,
-                    url=owner_url,
-                ),
-            ]
-        ]
-    )
-
-
 async def _edit_final(status, final: str, keyboard: InlineKeyboardMarkup):
-    """Always try hard to leave PINGING... state."""
-    # photo message → edit_caption
     try:
         await status.edit_caption(
             caption=final,
@@ -140,57 +121,54 @@ async def _edit_final(status, final: str, keyboard: InlineKeyboardMarkup):
         )
         return True
     except Exception as e:
-        print(f"[ping] edit_caption: {e}", flush=True)
+        print(f"[ping] edit_caption+kb: {e}", flush=True)
 
-    # text message → edit_text
     try:
         await status.edit_text(
-            final,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
+            final, reply_markup=keyboard, parse_mode=ParseMode.HTML
         )
         return True
     except Exception as e:
-        print(f"[ping] edit_text: {e}", flush=True)
+        print(f"[ping] edit_text+kb: {e}", flush=True)
 
-    # caption without keyboard
+    # Caption only, then try attach keyboard separately if needed
     try:
         await status.edit_caption(caption=final, parse_mode=ParseMode.HTML)
-        return True
     except Exception as e:
-        print(f"[ping] edit_caption no-kb: {e}", flush=True)
+        print(f"[ping] edit_caption: {e}", flush=True)
+        try:
+            await status.edit_text(final, parse_mode=ParseMode.HTML)
+        except Exception as e2:
+            print(f"[ping] edit_text: {e2}", flush=True)
 
-    # last: delete stuck msg + new reply
+    # Resend with keyboard (URL-only — no callback types)
     try:
         chat_id = status.chat.id
-        await status.delete()
-    except Exception:
-        chat_id = None
-
-    try:
-        if chat_id is not None:
+        photo = getattr(console, "STATS_IMAGE_URL", None) or getattr(
+            console, "START_IMAGE_URL", None
+        )
+        try:
+            await status.delete()
+        except Exception:
+            pass
+        if photo:
             await bot.send_photo(
                 chat_id,
-                photo=getattr(console, "STATS_IMAGE_URL", None)
-                or getattr(console, "START_IMAGE_URL", ""),
+                photo=photo,
                 caption=final,
                 reply_markup=keyboard,
                 parse_mode=ParseMode.HTML,
             )
         else:
-            await status.reply_text(
-                final, reply_markup=keyboard, parse_mode=ParseMode.HTML
+            await bot.send_message(
+                chat_id,
+                final,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
             )
         return True
     except Exception as e:
-        print(f"[ping] resend failed: {e}", flush=True)
-        try:
-            await status.reply_text(
-                f"⚡ {smallcaps('ping pong')}\n"
-                f"✨ ms: {final[-80:]}"
-            )
-        except Exception:
-            pass
+        print(f"[ping] resend: {e}", flush=True)
         return False
 
 
@@ -202,13 +180,11 @@ async def ping_command(client, message: Message):
         console, "START_IMAGE_URL", None
     )
 
-    # Delete user /ping
     try:
         await message.delete()
     except Exception:
         pass
 
-    # 1) Image + PINGING...
     status = None
     if photo:
         try:
@@ -229,13 +205,11 @@ async def ping_command(client, message: Message):
             print(f"[ping] text failed: {e}", flush=True)
             return
 
-    # 2) Latency (max 2s — never stuck)
     ms = await _get_latency(client)
     uptime = _get_uptime()
     final = _final_caption(ms, uptime)
     keyboard = _ping_keyboard()
 
-    # 3) MUST leave PINGING...
     ok = await _edit_final(status, final, keyboard)
     print(f"[ping] ok={ok} ms={ms}", flush=True)
 
