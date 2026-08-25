@@ -1,11 +1,11 @@
 """
 Telegram Bot API helpers — bypass broken kurigram KeyboardButtonUrl / Callback write().
-Use when pyrogram reply_markup.write fails.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Optional
 
 import httpx
@@ -42,6 +42,48 @@ def markup_to_api(markup) -> Optional[dict]:
     return {"inline_keyboard": rows}
 
 
+def fix_html_for_bot_api(text: str) -> str:
+    """Bot API is stricter than pyrogram HTML."""
+    if not text:
+        return text
+    # tg-emoji: single quotes → double quotes
+    text = re.sub(
+        r"<tg-emoji\s+emoji-id='([^']+)'>",
+        r'<tg-emoji emoji-id="\1">',
+        text,
+    )
+    # bare < > that break parser (keep valid tags)
+    return text
+
+
+def strip_html(text: str) -> str:
+    """Plain text fallback."""
+    if not text:
+        return text
+    text = re.sub(r"<tg-emoji[^>]*>|</tg-emoji>", "", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text
+
+
+async def _post(method: str, payload: dict) -> bool:
+    token = getattr(console, "BOT_TOKEN", None)
+    if not token:
+        print("[bot_api] BOT_TOKEN missing", flush=True)
+        return False
+    url = f"https://api.telegram.org/bot{token}/{method}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(url, data=payload)
+            data = r.json()
+            if not data.get("ok"):
+                print(f"[bot_api] {method} fail: {data}", flush=True)
+                return False
+            return True
+    except Exception as e:
+        print(f"[bot_api] {method} error: {e}", flush=True)
+        return False
+
+
 async def bot_api_send_photo(
     chat_id: int,
     photo: str,
@@ -49,33 +91,34 @@ async def bot_api_send_photo(
     reply_markup=None,
     parse_mode: str = "HTML",
 ) -> bool:
-    token = getattr(console, "BOT_TOKEN", None)
-    if not token:
-        print("[bot_api] BOT_TOKEN missing", flush=True)
-        return False
+    api_markup = markup_to_api(reply_markup)
+    markup_json = json.dumps(api_markup) if api_markup else None
 
+    # try 1: fixed HTML
     payload: dict[str, Any] = {
         "chat_id": chat_id,
         "photo": photo,
-        "caption": caption or "",
+        "caption": fix_html_for_bot_api(caption or ""),
         "parse_mode": parse_mode,
     }
-    api_markup = markup_to_api(reply_markup)
-    if api_markup:
-        payload["reply_markup"] = json.dumps(api_markup)
+    if markup_json:
+        payload["reply_markup"] = markup_json
+    if await _post("sendPhoto", payload):
+        return True
 
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(url, data=payload)
-            data = r.json()
-            if not data.get("ok"):
-                print(f"[bot_api] sendPhoto fail: {data}", flush=True)
-                return False
-            return True
-    except Exception as e:
-        print(f"[bot_api] sendPhoto error: {e}", flush=True)
-        return False
+    # try 2: plain caption + buttons
+    payload2: dict[str, Any] = {
+        "chat_id": chat_id,
+        "photo": photo,
+        "caption": strip_html(caption or "")[:1024],
+    }
+    if markup_json:
+        payload2["reply_markup"] = markup_json
+    if await _post("sendPhoto", payload2):
+        return True
+
+    # try 3: buttons only message if photo keeps failing
+    return False
 
 
 async def bot_api_send_message(
@@ -85,29 +128,25 @@ async def bot_api_send_message(
     parse_mode: str = "HTML",
     disable_web_page_preview: bool = True,
 ) -> bool:
-    token = getattr(console, "BOT_TOKEN", None)
-    if not token:
-        return False
+    api_markup = markup_to_api(reply_markup)
+    markup_json = json.dumps(api_markup) if api_markup else None
 
     payload: dict[str, Any] = {
         "chat_id": chat_id,
-        "text": text,
+        "text": fix_html_for_bot_api(text),
         "parse_mode": parse_mode,
-        "disable_web_page_preview": disable_web_page_preview,
+        "disable_web_page_preview": str(disable_web_page_preview).lower(),
     }
-    api_markup = markup_to_api(reply_markup)
-    if api_markup:
-        payload["reply_markup"] = json.dumps(api_markup)
+    if markup_json:
+        payload["reply_markup"] = markup_json
+    if await _post("sendMessage", payload):
+        return True
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(url, data=payload)
-            data = r.json()
-            if not data.get("ok"):
-                print(f"[bot_api] sendMessage fail: {data}", flush=True)
-                return False
-            return True
-    except Exception as e:
-        print(f"[bot_api] sendMessage error: {e}", flush=True)
-        return False
+    payload2: dict[str, Any] = {
+        "chat_id": chat_id,
+        "text": strip_html(text)[:4096],
+        "disable_web_page_preview": "true",
+    }
+    if markup_json:
+        payload2["reply_markup"] = markup_json
+    return await _post("sendMessage", payload2)
