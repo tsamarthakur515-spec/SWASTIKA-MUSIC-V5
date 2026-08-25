@@ -1,21 +1,22 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# One custom emoji · quote block · clear DB text · forced image
+# Image always attaches (send_photo, not reply after delete)
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
 
 import asyncio
+import io
 import platform
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .. import bot, call, console, cdx
-from ..modules.custom_emojis import E, tg_emoji, CE_CLOSE
+from ..modules.custom_emojis import tg_emoji, CE_CLOSE
 from ..modules.formatters import smallcaps
 
 try:
@@ -39,12 +40,17 @@ try:
 except Exception:
     _pyrogram = None
 
-# User-provided custom emoji (all lines use this)
-CE_PING = "6111504695728020416"
+try:
+    import aiohttp
+except Exception:
+    aiohttp = None
 
-# Forced ping image
+CE_PING = "6111504695728020416"
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
 _VERSION = "v5.0.0"
+
+# Cache downloaded image bytes so Telegram always gets a real file
+_PHOTO_BYTES: Optional[bytes] = None
 
 
 def em(fallback: str = "⚡") -> str:
@@ -143,7 +149,6 @@ def _ping_keyboard() -> InlineKeyboardMarkup:
         row1.append(
             _btn(smallcaps("support"), style=_PRIMARY, emoji_id=CE_PING, url=support)
         )
-
     rows = [row1]
     channel = _channel_url()
     row2 = []
@@ -169,7 +174,6 @@ async def _get_latency(client) -> int:
 
 
 async def _db_status() -> str:
-    """Plain readable English — no smallcaps (was showing as boxes)."""
     try:
         from ..modules.database import _ok, _pool
 
@@ -231,12 +235,39 @@ def _cpu_text() -> str:
         return "—"
 
 
-def _ping_photo() -> str:
-    """Always prefer dedicated ping image."""
+def _ping_photo_url() -> str:
     url = getattr(console, "PING_IMAGE_URL", None) or PING_IMAGE
     if url and str(url).startswith("http"):
         return str(url)
     return PING_IMAGE
+
+
+async def _load_photo() -> Union[str, io.BytesIO]:
+    """URL first; if Telegram cannot fetch it, download bytes ourselves."""
+    global _PHOTO_BYTES
+    url = _ping_photo_url()
+
+    if _PHOTO_BYTES:
+        bio = io.BytesIO(_PHOTO_BYTES)
+        bio.name = "ping.jpg"
+        return bio
+
+    if aiohttp is not None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        if data and len(data) > 1000:
+                            _PHOTO_BYTES = data
+                            bio = io.BytesIO(data)
+                            bio.name = "ping.jpg"
+                            print(f"[ping] image downloaded {len(data)} bytes", flush=True)
+                            return bio
+        except Exception as e:
+            print(f"[ping] download fail: {e}", flush=True)
+
+    return url
 
 
 async def _build_caption(
@@ -263,8 +294,6 @@ async def _build_caption(
     plat = platform.system() or "Linux"
     pyro_ver = getattr(_pyrogram, "__version__", "N/A") if _pyrogram else "N/A"
 
-    # All icons = same custom emoji ID
-    # Body inside expandable quote
     body = (
         f"{em()} <b>Swastika Music v5</b>\n"
         f"{em()} <b>@{uname}</b> — SYSTEM LIVE\n\n"
@@ -289,28 +318,30 @@ async def _build_caption(
 async def ping_command(client, message: Message):
     print("[ping] command received", flush=True)
 
-    photo = _ping_photo()
-    print(f"[ping] photo={photo}", flush=True)
+    chat_id = message.chat.id
 
     try:
         await message.delete()
     except Exception:
         pass
 
+    photo_task = asyncio.create_task(_load_photo())
     ms, db, counts = await asyncio.gather(
         _get_latency(client),
         _db_status(),
         _served_counts(),
     )
     users, chats = counts
+    photo = await photo_task
 
     uptime = _get_uptime()
     final = await _build_caption(client, ms, uptime, db, users, chats)
     keyboard = _ping_keyboard()
 
-    # Always try photo first with forced URL
+    # IMPORTANT: use send_photo(chat_id=...) — reply_photo after delete often fails
     try:
-        await message.reply_photo(
+        await client.send_photo(
+            chat_id=chat_id,
             photo=photo,
             caption=final,
             reply_markup=keyboard,
@@ -319,9 +350,9 @@ async def ping_command(client, message: Message):
         print(f"[ping] ok photo ms={ms} db={db}", flush=True)
         return
     except Exception as e:
-        print(f"[ping] photo+kb failed: {e}", flush=True)
+        print(f"[ping] send_photo+kb failed: {e}", flush=True)
 
-    # Plain keyboard + photo
+    # Retry with plain keyboard
     try:
         plain_row1 = [InlineKeyboardButton("Owner", url=_owner_url())]
         support = _support_url()
@@ -332,7 +363,13 @@ async def ping_command(client, message: Message):
         if channel:
             plain_row2.insert(0, InlineKeyboardButton("Updates", url=channel))
         plain_kb = InlineKeyboardMarkup([plain_row1, plain_row2])
-        await message.reply_photo(
+
+        # Reset BytesIO cursor if needed
+        if isinstance(photo, io.BytesIO):
+            photo.seek(0)
+
+        await client.send_photo(
+            chat_id=chat_id,
             photo=photo,
             caption=final,
             reply_markup=plain_kb,
@@ -343,18 +380,31 @@ async def ping_command(client, message: Message):
     except Exception as e2:
         print(f"[ping] plain photo failed: {e2}", flush=True)
 
-    # Text only last resort
+    # Last: photo without keyboard, then text
     try:
-        await message.reply_text(
-            final, reply_markup=keyboard, parse_mode=ParseMode.HTML
+        if isinstance(photo, io.BytesIO):
+            photo.seek(0)
+        await client.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=final,
+            parse_mode=ParseMode.HTML,
+        )
+        print(f"[ping] ok photo no-kb ms={ms}", flush=True)
+        return
+    except Exception as e3:
+        print(f"[ping] photo no-kb failed: {e3}", flush=True)
+
+    try:
+        await client.send_message(
+            chat_id=chat_id,
+            text=final,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
         )
         print(f"[ping] ok text ms={ms}", flush=True)
-    except Exception as e3:
-        print(f"[ping] text failed: {e3}", flush=True)
-        try:
-            await message.reply_text(final, parse_mode=ParseMode.HTML)
-        except Exception as e4:
-            print(f"[ping] final fail: {e4}", flush=True)
+    except Exception as e4:
+        print(f"[ping] text failed: {e4}", flush=True)
 
 
 print("[ping] plugin loaded OK", flush=True)
