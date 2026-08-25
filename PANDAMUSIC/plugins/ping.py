@@ -133,7 +133,7 @@ async def ping_command(client, message: Message):
         
         # Step 3: Send image with caption and buttons
         # Change this to your image path/URL
-        ping_image_url = "https://te.legra.ph/file/your-ping-image.jpg"  # Replace with your image
+        ping_image_url = "https://files.catbox.moe/nd3z3n.jpg"  # Replace with your image
         
         await message.reply_photo(
             photo=ping_image_url,
