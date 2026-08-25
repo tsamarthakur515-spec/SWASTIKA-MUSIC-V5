@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Short clean ping · important lines only · channel on powered by
+# Loading emoji → final photo · smallcaps · clean quotes
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -34,7 +34,11 @@ try:
 except Exception:
     aiohttp = None
 
+# Caption / button emoji
 CE_PING = "6111504695728020416"
+# Loading “sticker” custom emoji
+CE_LOAD = "6089090515540644835"
+
 PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
 CHANNEL_URL = "https://t.me/Swastika_update"
 _VERSION = "v5.0.0"
@@ -44,6 +48,10 @@ _PHOTO_BYTES: Optional[bytes] = None
 
 def em(fallback: str = "⚡") -> str:
     return tg_emoji(CE_PING, fallback)
+
+
+def load_em(fallback: str = "✨") -> str:
+    return tg_emoji(CE_LOAD, fallback)
 
 
 def q(line: str) -> str:
@@ -72,14 +80,14 @@ def _get_uptime() -> str:
 
 def _latency_label(ms: int) -> str:
     if ms <= 0:
-        return "N/A"
+        return smallcaps("n/a")
     if ms < 80:
-        return "🟢 Excellent"
+        return f"🟢 {smallcaps('excellent')}"
     if ms < 150:
-        return "🟡 Good"
+        return f"🟡 {smallcaps('good')}"
     if ms < 300:
-        return "🟠 Average"
-    return "🔴 Slow"
+        return f"🟠 {smallcaps('average')}"
+    return f"🔴 {smallcaps('slow')}"
 
 
 def _btn(text, style=None, emoji_id=None, **kwargs):
@@ -171,12 +179,12 @@ async def _db_status() -> str:
         from ..modules.database import _ok, _pool
 
         if not _ok() or _pool is None:
-            return "⚪ Offline (Memory Mode)"
+            return f"⚪ {smallcaps('offline')} ({smallcaps('memory mode')})"
         async with _pool.acquire() as conn:
             await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=1.0)
-        return "🟢 Connected"
+        return f"🟢 {smallcaps('connected')}"
     except Exception:
-        return "🔴 Error"
+        return f"🔴 {smallcaps('error')}"
 
 
 def _ping_photo_url() -> str:
@@ -225,16 +233,15 @@ async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
     ms_text = f"{ms}ms" if ms > 0 else "—"
     channel = _channel_url()
 
-    # Only important lines
     lines = [
-        q(f"{em()} <b>Swastika Music v5</b>"),
-        q(f"{em()} <b>@{uname}</b> — SYSTEM LIVE"),
-        q(f"{em()} <b>VERSION</b> : <code>{_VERSION}</code>"),
-        q(f"{em()} <b>LATENCY</b> : <code>{ms_text}</code> · {label}"),
-        q(f"{em()} <b>UPTIME</b> : <code>{uptime}</code>"),
-        q(f"{em()} <b>DATABASE</b> : <code>{db}</code>"),
+        q(f"{em()} <b>{smallcaps('swastika music v5')}</b>"),
+        q(f"{em()} <b>@{uname}</b> — {smallcaps('system live')}"),
+        q(f"{em()} <b>{smallcaps('version')}</b> : <code>{_VERSION}</code>"),
+        q(f"{em()} <b>{smallcaps('latency')}</b> : <code>{ms_text}</code> · {label}"),
+        q(f"{em()} <b>{smallcaps('uptime')}</b> : <code>{uptime}</code>"),
+        q(f"{em()} <b>{smallcaps('database')}</b> : <code>{db}</code>"),
         q(
-            f'{em()} <a href="{channel}"><b>POWERED BY SWASTIKA MUSIC</b></a>'
+            f'{em()} <a href="{channel}"><b>{smallcaps("powered by swastika music")}</b></a>'
         ),
     ]
     return "\n".join(lines)
@@ -251,14 +258,46 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
+    # ── 1) Loading bubble (premium emoji + ping......) ──────────
+    loading = None
+    try:
+        loading = await client.send_message(
+            chat_id=chat_id,
+            text=(
+                f"{load_em()} <b>{smallcaps('ping')}</b>"
+                f"{smallcaps('......')}"
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        print(f"[ping] loading send fail: {e}", flush=True)
+
+    # ── 2) Measure + download image while user sees loading ─────
+    t0 = time.perf_counter()
     photo_task = asyncio.create_task(_load_photo())
-    ms, db = await asyncio.gather(_get_latency(client), _db_status())
-    photo = await photo_task
+    ms_task = asyncio.create_task(_get_latency(client))
+    db_task = asyncio.create_task(_db_status())
+
+    ms, db, photo = await asyncio.gather(ms_task, db_task, photo_task)
+
+    # Keep loading visible ~1.0–1.5s total (premium feel)
+    elapsed = time.perf_counter() - t0
+    wait_more = max(0.0, 1.25 - elapsed)
+    if wait_more:
+        await asyncio.sleep(wait_more)
+
+    # ── 3) Remove loading ───────────────────────────────────────
+    if loading is not None:
+        try:
+            await loading.delete()
+        except Exception:
+            pass
 
     uptime = _get_uptime()
     final = await _build_caption(client, ms, uptime, db)
     keyboard = _ping_keyboard()
 
+    # ── 4) Final photo result ───────────────────────────────────
     try:
         await client.send_photo(
             chat_id=chat_id,
@@ -273,16 +312,18 @@ async def ping_command(client, message: Message):
         print(f"[ping] send_photo+kb failed: {e}", flush=True)
 
     try:
-        plain_row1 = [InlineKeyboardButton("Owner", url=_owner_url())]
+        plain_row1 = [InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]
         support = _support_url()
         if support:
-            plain_row1.append(InlineKeyboardButton("Support", url=support))
+            plain_row1.append(
+                InlineKeyboardButton(smallcaps("support"), url=support)
+            )
         plain_kb = InlineKeyboardMarkup(
             [
                 plain_row1,
                 [
-                    InlineKeyboardButton("Updates", url=_channel_url()),
-                    InlineKeyboardButton("Close", callback_data="close"),
+                    InlineKeyboardButton(smallcaps("updates"), url=_channel_url()),
+                    InlineKeyboardButton(smallcaps("close"), callback_data="close"),
                 ],
             ]
         )
