@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# image + ᴘɪɴɢɪɴɢ... → edit final | premium emojis | owner SUCCESS star
+# image + ᴘɪɴɢɪɴɢ... → delete → final photo+caption+owner button
+# (kurigram: edit_caption with reply_markup breaks KeyboardButtonUrl)
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -54,39 +55,47 @@ def _get_uptime() -> str:
     return " ".join(parts)
 
 
-def _owner_button() -> InlineKeyboardButton:
-    """SUCCESS color + premium star (E.STAR) + owner URL."""
-    owner = (getattr(console, "OWNER_USERNAME", None) or "").lstrip("@")
-    owner_url = f"https://t.me/{owner}" if owner else "https://t.me/tsamarthakur515"
-    text = smallcaps("owner")
-    star_id = str(E.STAR)
-
-    # 1) SUCCESS + custom emoji icon
-    for style in (_SUCCESS, "success", None):
-        kwargs = {"url": owner_url, "icon_custom_emoji_id": star_id}
+def _btn(text, style=None, emoji_id=None, **kwargs):
+    """Same pattern as start.py / stats.py (works on kurigram send)."""
+    if emoji_id:
+        kwargs["icon_custom_emoji_id"] = str(emoji_id)
+    if style is not None:
         try:
-            if style is not None:
-                return InlineKeyboardButton(text, style=style, **kwargs)
-            return InlineKeyboardButton(text, **kwargs)
+            return InlineKeyboardButton(text, style=style, **kwargs)
         except TypeError:
-            continue
-        except Exception:
-            continue
-
-    # 2) URL + emoji only (no style)
+            pass
+        try:
+            return InlineKeyboardButton(
+                text, style=str(getattr(style, "name", style)).lower(), **kwargs
+            )
+        except TypeError:
+            pass
     try:
-        return InlineKeyboardButton(
-            text, url=owner_url, icon_custom_emoji_id=star_id
-        )
+        return InlineKeyboardButton(text, **kwargs)
     except TypeError:
-        pass
+        kwargs.pop("icon_custom_emoji_id", None)
+        return InlineKeyboardButton(text, **kwargs)
 
-    # 3) Plain URL fallback
-    return InlineKeyboardButton(f"⭐ {text}", url=owner_url)
+
+def _owner_url() -> str:
+    owner = (getattr(console, "OWNER_USERNAME", None) or "").lstrip("@")
+    return f"https://t.me/{owner}" if owner else "https://t.me/tsamarthakur515"
 
 
 def _ping_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[_owner_button()]])
+    """One SUCCESS owner URL button + premium star (E.STAR)."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(
+                    smallcaps("owner"),
+                    style=_SUCCESS,
+                    emoji_id=E.STAR,
+                    url=_owner_url(),
+                )
+            ]
+        ]
+    )
 
 
 async def _get_latency(client) -> int:
@@ -112,66 +121,6 @@ def _final_caption(ms: int, uptime: str) -> str:
     )
 
 
-async def _edit_final(status, final: str, keyboard: InlineKeyboardMarkup):
-    try:
-        await status.edit_caption(
-            caption=final,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
-        )
-        return True
-    except Exception as e:
-        print(f"[ping] edit_caption+kb: {e}", flush=True)
-
-    try:
-        await status.edit_text(
-            final, reply_markup=keyboard, parse_mode=ParseMode.HTML
-        )
-        return True
-    except Exception as e:
-        print(f"[ping] edit_text+kb: {e}", flush=True)
-
-    # Caption only, then try attach keyboard separately if needed
-    try:
-        await status.edit_caption(caption=final, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        print(f"[ping] edit_caption: {e}", flush=True)
-        try:
-            await status.edit_text(final, parse_mode=ParseMode.HTML)
-        except Exception as e2:
-            print(f"[ping] edit_text: {e2}", flush=True)
-
-    # Resend with keyboard (URL-only — no callback types)
-    try:
-        chat_id = status.chat.id
-        photo = getattr(console, "STATS_IMAGE_URL", None) or getattr(
-            console, "START_IMAGE_URL", None
-        )
-        try:
-            await status.delete()
-        except Exception:
-            pass
-        if photo:
-            await bot.send_photo(
-                chat_id,
-                photo=photo,
-                caption=final,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await bot.send_message(
-                chat_id,
-                final,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
-        return True
-    except Exception as e:
-        print(f"[ping] resend: {e}", flush=True)
-        return False
-
-
 @bot.on_message(cdx("ping") & filters.incoming)
 async def ping_command(client, message: Message):
     print("[ping] command received", flush=True)
@@ -185,6 +134,7 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
+    # 1) Loading message (NO keyboard — avoids kurigram edit+kb bug)
     status = None
     if photo:
         try:
@@ -205,13 +155,82 @@ async def ping_command(client, message: Message):
             print(f"[ping] text failed: {e}", flush=True)
             return
 
+    # 2) Measure
     ms = await _get_latency(client)
     uptime = _get_uptime()
     final = _final_caption(ms, uptime)
     keyboard = _ping_keyboard()
+    chat_id = status.chat.id
 
-    ok = await _edit_final(status, final, keyboard)
-    print(f"[ping] ok={ok} ms={ms}", flush=True)
+    # 3) Delete loading → send FINAL with keyboard (same path as /stats /start)
+    try:
+        await status.delete()
+    except Exception as e:
+        print(f"[ping] delete loading: {e}", flush=True)
+
+    sent = False
+
+    if photo:
+        try:
+            await client.send_photo(
+                chat_id,
+                photo=photo,
+                caption=final,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+            sent = True
+        except Exception as e:
+            print(f"[ping] send_photo+kb: {e}", flush=True)
+            # try without style/emoji keyboard
+            try:
+                plain_kb = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]]
+                )
+                await client.send_photo(
+                    chat_id,
+                    photo=photo,
+                    caption=final,
+                    reply_markup=plain_kb,
+                    parse_mode=ParseMode.HTML,
+                )
+                sent = True
+            except Exception as e2:
+                print(f"[ping] send_photo plain kb: {e2}", flush=True)
+                try:
+                    await client.send_photo(
+                        chat_id,
+                        photo=photo,
+                        caption=final,
+                        parse_mode=ParseMode.HTML,
+                    )
+                    sent = True
+                except Exception as e3:
+                    print(f"[ping] send_photo no kb: {e3}", flush=True)
+
+    if not sent:
+        try:
+            await client.send_message(
+                chat_id,
+                final,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+            sent = True
+        except Exception as e:
+            print(f"[ping] send_message+kb: {e}", flush=True)
+            try:
+                await client.send_message(
+                    chat_id,
+                    final + f"\n\n⭐ <a href=\"{_owner_url()}\">{smallcaps('owner')}</a>",
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                )
+                sent = True
+            except Exception as e2:
+                print(f"[ping] send_message plain: {e2}", flush=True)
+
+    print(f"[ping] ok={sent} ms={ms}", flush=True)
 
 
 print("[ping] plugin loaded OK", flush=True)
