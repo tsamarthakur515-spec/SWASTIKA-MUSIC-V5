@@ -2,7 +2,12 @@ from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
 from ..modules.formatters import smallcaps
 from ..modules.custom_emojis import E, tg_emoji
-from ..modules.bot_api import bot_api_send_photo, bot_api_send_message
+from ..modules.bot_api import (
+    bot_api_send_photo,
+    bot_api_send_message,
+    bot_api_edit_message,
+    bot_api_answer_callback,
+)
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 import asyncio
@@ -229,7 +234,6 @@ def about_markup() -> InlineKeyboardMarkup:
 
 
 def _safe_mention(user) -> str:
-    """Plain HTML mention — no custom-emoji-in-name (breaks Bot API parser)."""
     if not user:
         return "User"
     name = html_lib.escape(user.first_name or "User")
@@ -305,23 +309,47 @@ def about_caption() -> str:
 
 
 async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
+    """Menu navigation — Bot API first (kurigram KeyboardButtonCallback broken)."""
+    msg = query.message
+    chat_id = msg.chat.id
+    message_id = msg.id
+    is_photo = bool(getattr(msg, "photo", None))
+
+    ok = await bot_api_edit_message(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=caption,
+        caption=caption,
+        reply_markup=markup,
+        is_photo=is_photo,
+    )
+    if ok:
+        print("[start] menu edit via Bot API OK", flush=True)
+        return
+
     try:
-        await query.message.edit_text(caption, reply_markup=markup, parse_mode=ParseMode.HTML)
+        if is_photo:
+            await msg.edit_caption(
+                caption=caption, reply_markup=markup, parse_mode=ParseMode.HTML
+            )
+        else:
+            await msg.edit_text(
+                caption, reply_markup=markup, parse_mode=ParseMode.HTML
+            )
+        return
+    except Exception as e:
+        print(f"[start] pyrogram edit failed: {e}", flush=True)
+
+    try:
+        await msg.edit_caption(caption=caption, parse_mode=ParseMode.HTML)
     except Exception:
         try:
-            await query.message.edit_caption(caption=caption, reply_markup=markup, parse_mode=ParseMode.HTML)
-        except Exception:
-            try:
-                await query.message.edit_text(caption, parse_mode=ParseMode.HTML)
-            except Exception:
-                try:
-                    await query.message.edit_caption(caption=caption, parse_mode=ParseMode.HTML)
-                except Exception:
-                    pass
+            await msg.edit_text(caption, parse_mode=ParseMode.HTML)
+        except Exception as e2:
+            print(f"[start] edit no-kb failed: {e2}", flush=True)
 
 
 async def _safe_reply(message, photo, caption, buttons):
-    """Photo + ALL buttons. Kurigram broken → Bot API HTTP."""
     chat_id = message.chat.id
 
     if photo:
@@ -384,7 +412,6 @@ async def start_message_private(client, message):
         except Exception:
             pass
 
-    # safe mention (premium name emojis break Bot API HTML)
     mention = _safe_mention(message.from_user)
     photo = console.START_IMAGE_URL
     caption = start_caption(mention)
@@ -409,25 +436,35 @@ async def start_message_private(client, message):
             pass
 
 
+async def _answer(query, text="", show_alert=False):
+    try:
+        await query.answer(text, show_alert=show_alert)
+    except Exception:
+        try:
+            await bot_api_answer_callback(query.id, text=text, show_alert=show_alert)
+        except Exception:
+            pass
+
+
 @bot.on_callback_query(rgx("repo_alert"))
 async def repo_alert_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    await query.answer(smallcaps("repo private hai") + " 🔒", show_alert=True)
+    await _answer(query, smallcaps("repo private hai") + " 🔒", show_alert=True)
 
 
 @bot.on_callback_query(rgx("support_alert"))
 async def support_alert_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    await query.answer(smallcaps("support chat set nahi hai config me"), show_alert=True)
+    await _answer(query, smallcaps("support chat set nahi hai config me"), show_alert=True)
 
 
 @bot.on_callback_query(rgx("update_alert"))
 async def update_alert_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
-    await query.answer(smallcaps("update chat set nahi hai config me"), show_alert=True)
+    await _answer(query, smallcaps("update chat set nahi hai config me"), show_alert=True)
 
 
 @bot.on_callback_query(rgx("about_menu"))
@@ -435,7 +472,7 @@ async def about_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, about_caption(), about_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("help_menu"))
@@ -443,7 +480,7 @@ async def help_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, help_list_caption(), help_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("music_menu"))
@@ -451,7 +488,7 @@ async def music_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, music_list_caption(), music_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("tools_menu"))
@@ -459,7 +496,7 @@ async def tools_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, tools_list_caption(), tools_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("moderation_menu"))
@@ -467,7 +504,7 @@ async def moderation_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, moderation_list_caption(), moderation_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("chatbot_menu"))
@@ -475,7 +512,7 @@ async def chatbot_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, chatbot_list_caption(), chatbot_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("locks_menu"))
@@ -483,7 +520,7 @@ async def locks_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, locks_list_caption(), locks_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("fun_menu"))
@@ -491,7 +528,7 @@ async def fun_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, fun_list_caption(), fun_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx(r"^cmdhelp\|"))
@@ -501,11 +538,11 @@ async def cmd_help_cb(client, query):
     try:
         key = query.data.split("|", 1)[1].strip().lower()
     except Exception:
-        return await query.answer("Invalid.", show_alert=True)
+        return await _answer(query, "Invalid.", show_alert=True)
     if key not in CMD_USAGE:
-        return await query.answer("Unknown command.", show_alert=True)
+        return await _answer(query, "Unknown command.", show_alert=True)
     await _edit_menu(query, cmd_usage_caption(key), cmd_help_markup())
-    await query.answer()
+    await _answer(query)
 
 
 @bot.on_callback_query(rgx("home_menu"))
@@ -514,4 +551,4 @@ async def home_menu_cb(client, query):
         return
     mention = _safe_mention(query.from_user)
     await _edit_menu(query, start_caption(mention), start_markup(client.me.username))
-    await query.answer()
+    await _answer(query)
