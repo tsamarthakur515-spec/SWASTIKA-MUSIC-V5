@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Smooth single reply (same pattern as /stats /start)
-# No loading → delete → resend flicker
+# Improved smooth ping: real DB status, latency label, dual buttons
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -13,7 +12,7 @@ from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from .. import bot, console, cdx
+from .. import bot, call, console, cdx
 from ..modules.custom_emojis import (
     E,
     tg_emoji,
@@ -29,8 +28,10 @@ try:
     from pyrogram.enums import ButtonStyle
 
     _SUCCESS = ButtonStyle.SUCCESS
+    _PRIMARY = ButtonStyle.PRIMARY
 except Exception:
     _SUCCESS = "success"
+    _PRIMARY = "primary"
 
 _BOT_START_TIME = time.time()
 
@@ -51,8 +52,19 @@ def _get_uptime() -> str:
     return " ".join(parts)
 
 
+def _latency_label(ms: int) -> str:
+    if ms <= 0:
+        return smallcaps("n/a")
+    if ms < 80:
+        return f"🟢 {smallcaps('excellent')}"
+    if ms < 150:
+        return f"🟡 {smallcaps('good')}"
+    if ms < 300:
+        return f"🟠 {smallcaps('average')}"
+    return f"🔴 {smallcaps('slow')}"
+
+
 def _btn(text, style=None, emoji_id=None, **kwargs):
-    """Same pattern as start.py / stats.py (works on kurigram send)."""
     if emoji_id:
         kwargs["icon_custom_emoji_id"] = str(emoji_id)
     if style is not None:
@@ -75,23 +87,46 @@ def _btn(text, style=None, emoji_id=None, **kwargs):
 
 def _owner_url() -> str:
     owner = (getattr(console, "OWNER_USERNAME", None) or "").lstrip("@")
-    return f"https://t.me/{owner}" if owner else "https://t.me/tsamarthakur515"
+    if owner:
+        return f"https://t.me/{owner}"
+    oid = getattr(console, "OWNER_ID", 0) or 0
+    if oid:
+        return f"tg://user?id={oid}"
+    return "https://t.me/tsamarthakur515"
+
+
+def _support_url() -> str | None:
+    chat = (getattr(console, "SUPPORT_CHAT", None) or "").lstrip("@").lstrip("+")
+    if not chat:
+        return None
+    if chat.startswith("http"):
+        return chat
+    # invite hash or username
+    if len(chat) > 20 or chat.startswith("+"):
+        return f"https://t.me/{chat if chat.startswith('+') else '+' + chat}"
+    return f"https://t.me/{chat}"
 
 
 def _ping_keyboard() -> InlineKeyboardMarkup:
-    """One SUCCESS owner URL button + premium star (E.STAR)."""
-    return InlineKeyboardMarkup(
-        [
-            [
-                _btn(
-                    smallcaps("owner"),
-                    style=_SUCCESS,
-                    emoji_id=E.STAR,
-                    url=_owner_url(),
-                )
-            ]
-        ]
-    )
+    row = [
+        _btn(
+            smallcaps("owner"),
+            style=_SUCCESS,
+            emoji_id=E.STAR,
+            url=_owner_url(),
+        )
+    ]
+    support = _support_url()
+    if support:
+        row.append(
+            _btn(
+                smallcaps("support"),
+                style=_PRIMARY,
+                emoji_id=E.BUTTERFLY,
+                url=support,
+            )
+        )
+    return InlineKeyboardMarkup([row])
 
 
 async def _get_latency(client) -> int:
@@ -104,13 +139,59 @@ async def _get_latency(client) -> int:
         return 0
 
 
-def _final_caption(ms: int, uptime: str) -> str:
+async def _db_status() -> str:
+    """Real DB check — green if pool alive, else offline/memory."""
+    try:
+        from ..modules.database import _ok, _pool
+
+        if not _ok() or _pool is None:
+            return f"⚪ {smallcaps('offline')} ({smallcaps('memory')})"
+        async with _pool.acquire() as conn:
+            await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=1.0)
+        return f"🟢 {smallcaps('connected')}"
+    except Exception:
+        return f"🔴 {smallcaps('error')}"
+
+
+def _active_vc_count() -> int:
+    try:
+        return len(getattr(call, "active_chats", []) or [])
+    except Exception:
+        return 0
+
+
+def _assistant_count() -> int:
+    try:
+        from ..modules.clients import assistants
+
+        return len(assistants) or (1 if getattr(console, "STRING1", None) else 0)
+    except Exception:
+        return 1 if getattr(console, "STRING1", None) else 0
+
+
+async def _build_caption(client, ms: int, uptime: str, db: str) -> str:
+    me = getattr(client, "me", None)
+    if me is None:
+        try:
+            me = await client.get_me()
+        except Exception:
+            me = None
+    uname = (getattr(me, "username", None) or "Swastika_musics_bot").lstrip("@")
+    label = _latency_label(ms)
+    active = _active_vc_count()
+    assistants_n = _assistant_count()
+    ms_text = f"{ms}ms" if ms > 0 else "—"
+
     return (
-        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>{smallcaps('ping pong')}</b>\n\n"
+        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
+        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>@{uname}</b> — {smallcaps('ping pong')}\n\n"
         f"{tg_emoji(CE_PING_VERSION, '⭐')} <b>{smallcaps('version')}</b> : <code>v5.0.0</code>\n"
-        f"{tg_emoji(CE_PING_MS, '✨')} <b>{smallcaps('ms')}</b> : <code>{ms}ms</code>\n"
+        f"{tg_emoji(CE_PING_MS, '✨')} <b>{smallcaps('latency')}</b> : <code>{ms_text}</code> · {label}\n"
         f"{tg_emoji(CE_PING_UPTIME, '🔧')} <b>{smallcaps('uptime')}</b> : <code>{uptime}</code>\n"
-        f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>{smallcaps('database')}</b> : <code>🟢 {smallcaps('connected')}</code>"
+        f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>{smallcaps('database')}</b> : <code>{db}</code>\n"
+        f"{tg_emoji(E.FIRE, '🔥')} <b>{smallcaps('active vc')}</b> : <code>{active}</code>\n"
+        f"{tg_emoji(E.WOLF, '🐺')} <b>{smallcaps('assistants')}</b> : <code>{assistants_n}</code>\n\n"
+        f"{tg_emoji(CE_PING_TITLE, '⚡')} <i>{smallcaps('powered by swastika music')}</i>"
     )
 
 
@@ -127,13 +208,15 @@ async def ping_command(client, message: Message):
     except Exception:
         pass
 
-    # Measure first — no loading message (smooth)
-    ms = await _get_latency(client)
+    # Parallel: latency + DB check
+    ms_task = asyncio.create_task(_get_latency(client))
+    db_task = asyncio.create_task(_db_status())
+    ms, db = await asyncio.gather(ms_task, db_task)
+
     uptime = _get_uptime()
-    final = _final_caption(ms, uptime)
+    final = await _build_caption(client, ms, uptime, db)
     keyboard = _ping_keyboard()
 
-    # Single clean reply (same style as /stats)
     try:
         if photo:
             await message.reply_photo(
@@ -146,16 +229,18 @@ async def ping_command(client, message: Message):
             await message.reply_text(
                 final, reply_markup=keyboard, parse_mode=ParseMode.HTML
             )
-        print(f"[ping] ok ms={ms}", flush=True)
+        print(f"[ping] ok ms={ms} db={db}", flush=True)
         return
     except Exception as e:
         print(f"[ping] photo+kb failed: {e}", flush=True)
 
-    # Fallback: plain button (no style / custom emoji)
+    # Fallback: plain buttons
     try:
-        plain_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]]
-        )
+        plain_row = [InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]
+        support = _support_url()
+        if support:
+            plain_row.append(InlineKeyboardButton(smallcaps("support"), url=support))
+        plain_kb = InlineKeyboardMarkup([plain_row])
         if photo:
             await message.reply_photo(
                 photo=photo,
@@ -172,7 +257,6 @@ async def ping_command(client, message: Message):
     except Exception as e2:
         print(f"[ping] plain kb failed: {e2}", flush=True)
 
-    # Last fallback: text only
     try:
         await message.reply_text(final, parse_mode=ParseMode.HTML)
         print(f"[ping] ok (text only) ms={ms}", flush=True)
