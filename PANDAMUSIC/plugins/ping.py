@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # SWASTIKA MUSIC — ping.py
-# Ultimate premium ping — full status, smooth single reply
+# One custom emoji · quote block · clear DB text · forced image
 # ---------------------------------------------------------------
 
 print("[ping] loading plugin...", flush=True)
@@ -15,16 +15,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .. import bot, call, console, cdx
-from ..modules.custom_emojis import (
-    E,
-    tg_emoji,
-    CE_PING_TITLE,
-    CE_PING_VERSION,
-    CE_PING_MS,
-    CE_PING_UPTIME,
-    CE_PING_DATABASE,
-    CE_CLOSE,
-)
+from ..modules.custom_emojis import E, tg_emoji, CE_CLOSE
 from ..modules.formatters import smallcaps
 
 try:
@@ -48,8 +39,16 @@ try:
 except Exception:
     _pyrogram = None
 
-_DEFAULT_PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
+# User-provided custom emoji (all lines use this)
+CE_PING = "6111504695728020416"
+
+# Forced ping image
+PING_IMAGE = "https://files.catbox.moe/wfqfeh.jpg"
 _VERSION = "v5.0.0"
+
+
+def em(fallback: str = "⚡") -> str:
+    return tg_emoji(CE_PING, fallback)
 
 
 def _boot_ts() -> float:
@@ -74,14 +73,14 @@ def _get_uptime() -> str:
 
 def _latency_label(ms: int) -> str:
     if ms <= 0:
-        return smallcaps("n/a")
+        return "N/A"
     if ms < 80:
-        return f"🟢 {smallcaps('excellent')}"
+        return "🟢 Excellent"
     if ms < 150:
-        return f"🟡 {smallcaps('good')}"
+        return "🟡 Good"
     if ms < 300:
-        return f"🟠 {smallcaps('average')}"
-    return f"🔴 {smallcaps('slow')}"
+        return "🟠 Average"
+    return "🔴 Slow"
 
 
 def _btn(text, style=None, emoji_id=None, **kwargs):
@@ -137,27 +136,25 @@ def _channel_url() -> Optional[str]:
 
 def _ping_keyboard() -> InlineKeyboardMarkup:
     row1 = [
-        _btn(smallcaps("owner"), style=_SUCCESS, emoji_id=E.STAR, url=_owner_url())
+        _btn(smallcaps("owner"), style=_SUCCESS, emoji_id=CE_PING, url=_owner_url())
     ]
     support = _support_url()
     if support:
         row1.append(
-            _btn(smallcaps("support"), style=_PRIMARY, emoji_id=E.BUTTERFLY, url=support)
+            _btn(smallcaps("support"), style=_PRIMARY, emoji_id=CE_PING, url=support)
         )
 
     rows = [row1]
-
     channel = _channel_url()
     row2 = []
     if channel:
         row2.append(
-            _btn(smallcaps("updates"), style=_PRIMARY, emoji_id=E.FIRE, url=channel)
+            _btn(smallcaps("updates"), style=_PRIMARY, emoji_id=CE_PING, url=channel)
         )
     row2.append(
         _btn(smallcaps("close"), style=_DANGER, emoji_id=CE_CLOSE, callback_data="close")
     )
     rows.append(row2)
-
     return InlineKeyboardMarkup(rows)
 
 
@@ -172,16 +169,17 @@ async def _get_latency(client) -> int:
 
 
 async def _db_status() -> str:
+    """Plain readable English — no smallcaps (was showing as boxes)."""
     try:
         from ..modules.database import _ok, _pool
 
         if not _ok() or _pool is None:
-            return f"⚪ {smallcaps('offline')} ({smallcaps('memory')})"
+            return "⚪ Offline (Memory Mode)"
         async with _pool.acquire() as conn:
             await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=1.0)
-        return f"🟢 {smallcaps('connected')}"
+        return "🟢 Connected"
     except Exception:
-        return f"🔴 {smallcaps('error')}"
+        return "🔴 Error"
 
 
 async def _served_counts() -> Tuple[int, int]:
@@ -233,12 +231,12 @@ def _cpu_text() -> str:
         return "—"
 
 
-def _ping_photo() -> Optional[str]:
-    for key in ("PING_IMAGE_URL", "STATS_IMAGE_URL", "START_IMAGE_URL"):
-        url = getattr(console, key, None)
-        if url and str(url).startswith("http"):
-            return str(url)
-    return _DEFAULT_PING_IMAGE
+def _ping_photo() -> str:
+    """Always prefer dedicated ping image."""
+    url = getattr(console, "PING_IMAGE_URL", None) or PING_IMAGE
+    if url and str(url).startswith("http"):
+        return str(url)
+    return PING_IMAGE
 
 
 async def _build_caption(
@@ -265,23 +263,26 @@ async def _build_caption(
     plat = platform.system() or "Linux"
     pyro_ver = getattr(_pyrogram, "__version__", "N/A") if _pyrogram else "N/A"
 
-    return (
-        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗠𝘂𝘀𝗶𝗰 𝘃𝟱</b>\n"
-        f"{tg_emoji(CE_PING_TITLE, '⚡')} <b>@{uname}</b> — {smallcaps('system live')}\n\n"
-        f"{tg_emoji(CE_PING_VERSION, '⭐')} <b>{smallcaps('version')}</b> : <code>{_VERSION}</code>\n"
-        f"{tg_emoji(CE_PING_MS, '✨')} <b>{smallcaps('latency')}</b> : <code>{ms_text}</code> · {label}\n"
-        f"{tg_emoji(CE_PING_UPTIME, '🔧')} <b>{smallcaps('uptime')}</b> : <code>{uptime}</code>\n"
-        f"{tg_emoji(CE_PING_DATABASE, '⚙️')} <b>{smallcaps('database')}</b> : <code>{db}</code>\n\n"
-        f"{tg_emoji(E.FIRE, '🔥')} <b>{smallcaps('active vc')}</b> : <code>{active}</code>\n"
-        f"{tg_emoji(E.WOLF, '🐺')} <b>{smallcaps('assistants')}</b> : <code>{assistants_n}</code>\n"
-        f"{tg_emoji(E.STAR, '🌟')} <b>{smallcaps('users')}</b> : <code>{users}</code>\n"
-        f"{tg_emoji(E.CHECK, '✅')} <b>{smallcaps('chats')}</b> : <code>{chats}</code>\n\n"
-        f"{tg_emoji(E.GEAR, '⚙️')} <b>{smallcaps('ram')}</b> : <code>{ram}</code>\n"
-        f"{tg_emoji(E.LIGHTNING, '⚡')} <b>{smallcaps('cpu')}</b> : <code>{cpu}</code>\n"
-        f"{tg_emoji(E.SPIRAL, '🌀')} <b>{smallcaps('os')}</b> : <code>{plat}</code>\n"
-        f"{tg_emoji(E.SPARKLES, '✨')} <b>{smallcaps('pyrogram')}</b> : <code>{pyro_ver}</code>\n\n"
-        f"{tg_emoji(CE_PING_TITLE, '⚡')} <i>{smallcaps('powered by swastika music')}</i>"
+    # All icons = same custom emoji ID
+    # Body inside expandable quote
+    body = (
+        f"{em()} <b>Swastika Music v5</b>\n"
+        f"{em()} <b>@{uname}</b> — SYSTEM LIVE\n\n"
+        f"{em()} <b>VERSION</b> : <code>{_VERSION}</code>\n"
+        f"{em()} <b>LATENCY</b> : <code>{ms_text}</code> · {label}\n"
+        f"{em()} <b>UPTIME</b> : <code>{uptime}</code>\n"
+        f"{em()} <b>DATABASE</b> : <code>{db}</code>\n\n"
+        f"{em()} <b>ACTIVE VC</b> : <code>{active}</code>\n"
+        f"{em()} <b>ASSISTANTS</b> : <code>{assistants_n}</code>\n"
+        f"{em()} <b>USERS</b> : <code>{users}</code>\n"
+        f"{em()} <b>CHATS</b> : <code>{chats}</code>\n\n"
+        f"{em()} <b>RAM</b> : <code>{ram}</code>\n"
+        f"{em()} <b>CPU</b> : <code>{cpu}</code>\n"
+        f"{em()} <b>OS</b> : <code>{plat}</code>\n"
+        f"{em()} <b>PYROGRAM</b> : <code>{pyro_ver}</code>\n\n"
+        f"{em()} <i>POWERED BY SWASTIKA MUSIC</i>"
     )
+    return f"<blockquote expandable>{body}</blockquote>"
 
 
 @bot.on_message(cdx("ping") & filters.incoming)
@@ -289,13 +290,13 @@ async def ping_command(client, message: Message):
     print("[ping] command received", flush=True)
 
     photo = _ping_photo()
+    print(f"[ping] photo={photo}", flush=True)
 
     try:
         await message.delete()
     except Exception:
         pass
 
-    # Parallel: latency + DB + served counts
     ms, db, counts = await asyncio.gather(
         _get_latency(client),
         _db_status(),
@@ -307,57 +308,53 @@ async def ping_command(client, message: Message):
     final = await _build_caption(client, ms, uptime, db, users, chats)
     keyboard = _ping_keyboard()
 
+    # Always try photo first with forced URL
     try:
-        if photo:
-            await message.reply_photo(
-                photo=photo,
-                caption=final,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await message.reply_text(
-                final, reply_markup=keyboard, parse_mode=ParseMode.HTML
-            )
-        print(f"[ping] ok ms={ms} db={db}", flush=True)
+        await message.reply_photo(
+            photo=photo,
+            caption=final,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+        )
+        print(f"[ping] ok photo ms={ms} db={db}", flush=True)
         return
     except Exception as e:
         print(f"[ping] photo+kb failed: {e}", flush=True)
 
-    # Fallback: plain URL buttons (no style / emoji)
+    # Plain keyboard + photo
     try:
-        plain_row1 = [InlineKeyboardButton(smallcaps("owner"), url=_owner_url())]
+        plain_row1 = [InlineKeyboardButton("Owner", url=_owner_url())]
         support = _support_url()
         if support:
-            plain_row1.append(InlineKeyboardButton(smallcaps("support"), url=support))
-        plain_row2 = [InlineKeyboardButton(smallcaps("close"), callback_data="close")]
+            plain_row1.append(InlineKeyboardButton("Support", url=support))
+        plain_row2 = [InlineKeyboardButton("Close", callback_data="close")]
         channel = _channel_url()
         if channel:
-            plain_row2.insert(
-                0, InlineKeyboardButton(smallcaps("updates"), url=channel)
-            )
+            plain_row2.insert(0, InlineKeyboardButton("Updates", url=channel))
         plain_kb = InlineKeyboardMarkup([plain_row1, plain_row2])
-        if photo:
-            await message.reply_photo(
-                photo=photo,
-                caption=final,
-                reply_markup=plain_kb,
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await message.reply_text(
-                final, reply_markup=plain_kb, parse_mode=ParseMode.HTML
-            )
-        print(f"[ping] ok (plain kb) ms={ms}", flush=True)
+        await message.reply_photo(
+            photo=photo,
+            caption=final,
+            reply_markup=plain_kb,
+            parse_mode=ParseMode.HTML,
+        )
+        print(f"[ping] ok plain photo ms={ms}", flush=True)
         return
     except Exception as e2:
-        print(f"[ping] plain kb failed: {e2}", flush=True)
+        print(f"[ping] plain photo failed: {e2}", flush=True)
 
+    # Text only last resort
     try:
-        await message.reply_text(final, parse_mode=ParseMode.HTML)
-        print(f"[ping] ok (text only) ms={ms}", flush=True)
+        await message.reply_text(
+            final, reply_markup=keyboard, parse_mode=ParseMode.HTML
+        )
+        print(f"[ping] ok text ms={ms}", flush=True)
     except Exception as e3:
         print(f"[ping] text failed: {e3}", flush=True)
+        try:
+            await message.reply_text(final, parse_mode=ParseMode.HTML)
+        except Exception as e4:
+            print(f"[ping] final fail: {e4}", flush=True)
 
 
 print("[ping] plugin loaded OK", flush=True)
