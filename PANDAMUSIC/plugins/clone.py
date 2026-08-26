@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------
 # PANDAMUSIC — clone.py
-# ALWAYS replies — never silent fail
+# /clone TOKEN → delete user msg → "cloning...." → success + @username
+# NO InlineKeyboard URL buttons (kurigram KeyboardButtonUrl crash)
 # ---------------------------------------------------------------
 
 print("[clone] loading plugin...", flush=True)
@@ -10,196 +11,239 @@ import traceback
 
 from pyrogram import filters
 from pyrogram.enums import ChatType, ParseMode
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pyrogram.types import Message
 
-from .. import bot, console
-from ..modules.formatters import smallcaps
-
-try:
-    from ..modules.clones import (
-        db_list_clones,
-        get_running_clones,
-        is_bot_token,
-        start_clone_client,
-        stop_clone_client,
-        user_can_clone,
-    )
-
-    _CLONE_OK = True
-    print("[clone] modules.clones imported OK", flush=True)
-except Exception as _e:
-    _CLONE_OK = False
-    print(f"[clone] modules.clones IMPORT FAIL: {_e}", flush=True)
-    traceback.print_exc()
-
-    def is_bot_token(text):
-        return bool(re.match(r"^\d{5,15}:[A-Za-z0-9_-]{20,}$", (text or "").strip()))
-
-    async def user_can_clone(_uid):
-        return True, ""
-
-    async def start_clone_client(*a, **k):
-        raise RuntimeError("clones module load nahi hua — bot rebuild karo")
-
-    async def stop_clone_client(*a, **k):
-        return False
-
-    async def db_list_clones(*a, **k):
-        return []
-
-    def get_running_clones():
-        return []
-
+from .. import bot, cdx, console
 
 _pending_token = {}
-TOKEN_RE = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{20,}$")
+TOKEN_FIND = re.compile(r"(\d{5,15}:[A-Za-z0-9_-]{20,100})")
 
 
 def _is_owner(uid):
     return bool(uid and uid == getattr(console, "OWNER_ID", 0))
 
 
-def _extract_token(message):
-    """Parse token from /clone <token> even if split oddly."""
-    text = (message.text or message.caption or "").strip()
-    if not text:
-        return ""
-    # strip bot username: /clone@BotName TOKEN
-    parts = text.split(None, 1)
-    if len(parts) < 2:
-        return ""
-    rest = parts[1].strip()
-    # full token is one word usually
-    first = rest.split()[0].strip()
-    if TOKEN_RE.match(first):
-        return first
-    if TOKEN_RE.match(rest):
-        return rest
-    return first if ":" in first else ""
+def _normalize_token(raw: str) -> str:
+    return re.sub(r"\s+", "", (raw or "").strip())
 
 
-@bot.on_message(filters.command(["clone", "clonebot"], prefixes=["/", "!", "."]) & filters.private)
+def _looks_like_token(t: str) -> bool:
+    t = _normalize_token(t)
+    if not t or ":" not in t:
+        return False
+    left, right = t.split(":", 1)
+    return left.isdigit() and 5 <= len(left) <= 15 and len(right) >= 20
+
+
+def _extract_token(message: Message) -> str:
+    text = (message.text or message.caption or "") or ""
+    if not text.strip():
+        return ""
+
+    parts = text.strip().split(None, 1)
+    if len(parts) >= 2:
+        joined = _normalize_token(parts[1])
+        if _looks_like_token(joined):
+            return joined
+        m = TOKEN_FIND.search(joined)
+        if m:
+            return m.group(1)
+
+    compact = _normalize_token(text)
+    m = TOKEN_FIND.search(compact)
+    if m:
+        return m.group(1)
+
+    try:
+        cmd = list(message.command or [])
+        if len(cmd) >= 2:
+            joined = _normalize_token("".join(cmd[1:]))
+            if _looks_like_token(joined):
+                return joined
+            m = TOKEN_FIND.search(joined)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return ""
+
+
+async def _reply(message, text):
+    try:
+        return await message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        print(f"[clone] reply HTML fail: {e}", flush=True)
+        try:
+            return await message.reply_text(re.sub(r"<[^>]+>", "", text))
+        except Exception as e2:
+            print(f"[clone] reply plain fail: {e2}", flush=True)
+            return None
+
+
+async def _edit(msg, text):
+    if not msg:
+        return None
+    try:
+        return await msg.edit_text(text, parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            return await msg.edit_text(re.sub(r"<[^>]+>", "", text))
+        except Exception:
+            try:
+                return await msg.reply_text(text, parse_mode=ParseMode.HTML)
+            except Exception:
+                return None
+
+
+async def _delete(message):
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
+@bot.on_message(cdx(["clone", "clonebot"]))
 async def clone_cmd(client, message: Message):
-    print(f"[clone] /clone from {getattr(message.from_user, 'id', None)}", flush=True)
+    print(
+        f"[clone] CMD hit uid={getattr(message.from_user, 'id', None)} "
+        f"chat={getattr(message.chat, 'type', None)} "
+        f"text={((message.text or '')[:100])!r}",
+        flush=True,
+    )
     try:
         if not message.from_user:
-            return await message.reply_text("❌ User not found.")
+            return await _reply(message, "❌ User not found.")
+
+        if message.chat and message.chat.type != ChatType.PRIVATE:
+            return await _reply(
+                message,
+                "🔒 Clone sirf <b>private chat</b> me chalta hai.\n"
+                "Bot ko DM karke /clone bhejo.",
+            )
 
         uid = message.from_user.id
         token = _extract_token(message)
+        print(f"[clone] token_len={len(token)} valid={_looks_like_token(token)}", flush=True)
 
         if not token:
             _pending_token[uid] = True
-            return await message.reply_text(
+            return await _reply(
+                message,
                 "✨ <b>Swastika Clone</b>\n\n"
-                "Apna bot banane ke liye:\n"
-                "1. @BotFather → /newbot\n"
-                "2. Token copy karo\n"
-                "3. Yahan bhejo:\n"
-                "   <code>/clone 123456:AAHxxxx</code>\n\n"
-                "Ya abhi seedha <b>BOT_TOKEN</b> is chat me paste karo.\n\n"
+                "Usage (token <b>ek line</b> me):\n"
+                "<code>/clone 123456:AAHxxxx</code>\n\n"
+                "Ya /clone ke baad agli message me sirf token bhejo.\n\n"
                 "• /myclones — list\n"
                 "• /delclone ID — delete",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("BotFather", url="https://t.me/BotFather")]]
-                ),
             )
 
-        await _run_clone(client, message, token)
+        await _do_clone(message, token)
     except Exception as e:
         print(f"[clone] clone_cmd ERROR: {e}", flush=True)
         traceback.print_exc()
-        try:
-            await message.reply_text(f"❌ Clone error:\n<code>{str(e)[:400]}</code>", parse_mode=ParseMode.HTML)
-        except Exception:
-            pass
+        await _reply(message, f"❌ Clone error:\n<code>{str(e)[:400]}</code>")
 
 
-@bot.on_message(filters.private & filters.text & ~filters.command(["start", "help", "clone", "clonebot", "myclones", "delclone", "clones"], prefixes=["/", "!", "."]))
+@bot.on_message(
+    filters.private
+    & filters.text
+    & ~cdx(["start", "help", "clone", "clonebot", "myclones", "myclone", "delclone", "clones"])
+)
 async def clone_token_paste(client, message: Message):
     if not message.from_user:
         return
     uid = message.from_user.id
     if not _pending_token.get(uid):
         return
-    text = (message.text or "").strip()
-    if not TOKEN_RE.match(text):
-        if ":" in text and len(text) > 20:
-            return await message.reply_text(
-                "❌ Token format galat.\n<code>123456789:AAHxxxx...</code>",
-                parse_mode=ParseMode.HTML,
+
+    text = _normalize_token(message.text or "")
+    m = TOKEN_FIND.search(text)
+    token = m.group(1) if m else text
+    if not _looks_like_token(token):
+        if ":" in text:
+            return await _reply(
+                message,
+                "❌ Token incomplete / galat.\n"
+                "Poora token <b>ek line</b> me bhejo.",
             )
         return
+
     _pending_token.pop(uid, None)
-    print(f"[clone] token paste from {uid}", flush=True)
-    await _run_clone(client, message, text)
+    print(f"[clone] paste from {uid}", flush=True)
+    await _do_clone(message, token)
 
 
-async def _run_clone(client, message: Message, token: str):
+async def _do_clone(message: Message, token: str):
     uid = message.from_user.id
-    chat_id = message.chat.id
-    token = token.strip()
+    token = _normalize_token(token)
 
-    # Reply FIRST so user always sees something (never silent)
-    status = await message.reply_text("⏳ Clone start ho raha hai... thoda wait karo.")
+    status = await _reply(message, "⏳ <b>cloning....</b>")
+    await _delete(message)
 
-    if not _CLONE_OK:
-        return await status.edit_text(
-            "❌ Clone module load nahi hua.\n"
-            "BotNest pe <b>Rebuild</b> karo (GitHub token sahi hona chahiye).",
-            parse_mode=ParseMode.HTML,
+    if not _looks_like_token(token):
+        return await _edit(
+            status,
+            "❌ Invalid token.\nExample: <code>123456789:AAHxxxx</code>",
+        )
+
+    try:
+        from ..modules.clones import is_bot_token, start_clone_client, user_can_clone
+    except Exception as e:
+        print(f"[clone] import clones fail: {e}", flush=True)
+        traceback.print_exc()
+        return await _edit(
+            status,
+            "❌ Clone module load nahi hua.\nPanel se <b>Rebuild</b> karo.",
         )
 
     if not is_bot_token(token):
-        return await status.edit_text(
-            "❌ Invalid token format.\nExample: <code>123456789:AAHxxxx...</code>",
-            parse_mode=ParseMode.HTML,
+        return await _edit(
+            status,
+            "❌ Invalid token format.\n<code>123456789:AAHxxxx</code>",
         )
 
     ok, reason = await user_can_clone(uid)
     if not ok:
-        return await status.edit_text(f"❌ {reason}")
+        return await _edit(status, f"❌ {reason}")
 
     try:
         entry = await start_clone_client(token, uid)
     except Exception as e:
-        print(f"[clone] start_clone_client: {e}", flush=True)
+        print(f"[clone] start fail: {e}", flush=True)
         traceback.print_exc()
-        return await status.edit_text(
-            f"❌ Clone fail:\n<code>{str(e)[:500]}</code>\n\n"
-            "• @BotFather se <b>naya</b> token lo\n"
-            "• Main Swastika bot ka token mat use karo\n"
-            "• Token me space / extra text mat rakho",
-            parse_mode=ParseMode.HTML,
+        return await _edit(
+            status,
+            f"❌ Clone fail:\n<code>{str(e)[:450]}</code>\n\n"
+            "• @BotFather se naya token\n"
+            "• Main bot token mat use karo\n"
+            "• Token ek line me bhejo",
         )
 
-    # try delete the token message for safety
-    try:
-        await message.delete()
-    except Exception:
-        pass
+    uname = (entry.get("username") or "").strip()
+    bot_id = entry.get("bot_id")
+    name = entry.get("name") or "Clone"
+    who = f"@{uname}" if uname else f"<code>{bot_id}</code>"
 
-    uname = entry.get("username") or ""
-    mention = f"@{uname}" if uname else f"<code>{entry['bot_id']}</code>"
-    await status.edit_text(
-        f"✅ <b>Clone ready!</b>\n\n"
-        f"🤖 {mention}\n"
-        f"📛 {entry.get('name') or 'Clone'}\n"
-        f"🆔 <code>{entry['bot_id']}</code>\n\n"
-        f"Ab ye karo:\n"
-        f"1. Clone bot ko group me add karo\n"
-        f"2. Admin + manage video chats do\n"
-        f"3. Clone pe <code>/cloneping</code>\n"
-        f"4. Phir <code>/play song</code>\n\n"
-        f"/myclones · /delclone {entry['bot_id']}",
-        parse_mode=ParseMode.HTML,
+    text = (
+        f"✅ <b>Bot Cloned!</b>\n\n"
+        f"🤖 Username: <b>{who}</b>\n"
+        f"📛 Name: {name}\n"
+        f"🆔 <code>{bot_id}</code>\n\n"
+        f"Next:\n"
+        f"1. {who} ko group me add karo\n"
+        f"2. Admin + manage video chats\n"
+        f"3. Clone pe /cloneping\n"
+        f"4. /play song\n\n"
+        f"/myclones · /delclone {bot_id}"
     )
+    await _edit(status, text)
 
 
-@bot.on_message(filters.command(["myclones", "myclone"], prefixes=["/", "!", "."]))
+@bot.on_message(cdx(["myclones", "myclone"]))
 async def myclones_cmd(client, message: Message):
     try:
+        from ..modules.clones import db_list_clones, get_running_clones
+
         if not message.from_user:
             return
         uid = message.from_user.id
@@ -212,36 +256,33 @@ async def myclones_cmd(client, message: Message):
             if c["owner_id"] == uid:
                 seen[int(c["bot_id"])] = {**seen.get(int(c["bot_id"]), {}), **c}
         if not seen:
-            return await message.reply_text(
-                "📭 Koi clone nahi.\n<code>/clone TOKEN</code> se banao.",
-                parse_mode=ParseMode.HTML,
-            )
+            return await _reply(message, "📭 Koi clone nahi.\n<code>/clone TOKEN</code>")
         lines = ["🌟 <b>Your Clones</b>\n"]
         for i, (bid, r) in enumerate(seen.items(), 1):
             un = r.get("username") or ""
             tag = f"@{un}" if un else f"<code>{bid}</code>"
             online = "🟢" if bid in running_ids else "🔴"
-            lines.append(f"{i}. {online} {tag}\n   🆔 <code>{bid}</code> · /delclone {bid}")
-        await message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            lines.append(f"{i}. {online} {tag}\n   /delclone {bid}")
+        await _reply(message, "\n".join(lines))
     except Exception as e:
-        await message.reply_text(f"❌ {e}")
+        await _reply(message, f"❌ {e}")
 
 
-@bot.on_message(filters.command(["delclone", "removeclone", "rmclone"], prefixes=["/", "!", "."]))
+@bot.on_message(cdx(["delclone", "removeclone", "rmclone"]))
 async def delclone_cmd(client, message: Message):
     try:
+        from ..modules.clones import db_list_clones, get_running_clones, stop_clone_client
+
         if not message.from_user:
             return
         uid = message.from_user.id
         args = message.command or []
         if len(args) < 2:
-            return await message.reply_text(
-                "Usage: <code>/delclone BOT_ID</code>", parse_mode=ParseMode.HTML
-            )
+            return await _reply(message, "Usage: <code>/delclone BOT_ID</code>")
         raw = args[1].strip().lstrip("@")
-        target_id = int(raw) if raw.isdigit() else None
-        if not target_id:
-            return await message.reply_text("❌ Numeric BOT_ID do.")
+        if not raw.isdigit():
+            return await _reply(message, "❌ Numeric BOT_ID do.")
+        target_id = int(raw)
         owner_of = None
         for r in await db_list_clones():
             if int(r["bot_id"]) == target_id:
@@ -253,40 +294,43 @@ async def delclone_cmd(client, message: Message):
                     owner_of = int(c["owner_id"])
                     break
         if owner_of is None:
-            return await message.reply_text("❌ Clone not found.")
+            return await _reply(message, "❌ Clone not found.")
         if owner_of != uid and not _is_owner(uid):
-            return await message.reply_text("❌ Ye clone tumhara nahi.")
+            return await _reply(message, "❌ Ye clone tumhara nahi.")
         await stop_clone_client(target_id)
-        await message.reply_text(
-            f"✅ Clone removed.\n🆔 <code>{target_id}</code>", parse_mode=ParseMode.HTML
-        )
+        await _reply(message, f"✅ Clone removed.\n🆔 <code>{target_id}</code>")
     except Exception as e:
-        await message.reply_text(f"❌ {e}")
+        await _reply(message, f"❌ {e}")
 
 
-@bot.on_message(filters.command(["clones", "allclones"], prefixes=["/", "!", "."]))
+@bot.on_message(cdx(["clones", "allclones"]))
 async def all_clones_cmd(client, message: Message):
     if not message.from_user or not _is_owner(message.from_user.id):
-        return await message.reply_text("❌ Owner only.")
-    rows = await db_list_clones()
-    running = {c["bot_id"]: c for c in get_running_clones()}
-    if not rows and not running:
-        return await message.reply_text("📭 No clones.")
-    lines = ["👑 <b>All Clones</b>\n"]
-    seen = set()
-    for r in rows:
-        bid = int(r["bot_id"])
-        seen.add(bid)
-        un = r.get("username") or ""
-        tag = f"@{un}" if un else str(bid)
-        online = "🟢" if bid in running else "🔴"
-        lines.append(f"{online} {tag} · owner <code>{r['owner_id']}</code> · <code>{bid}</code>")
-    for bid, c in running.items():
-        if bid not in seen:
-            un = c.get("username") or ""
+        return await _reply(message, "❌ Owner only.")
+    try:
+        from ..modules.clones import db_list_clones, get_running_clones
+
+        rows = await db_list_clones()
+        running = {c["bot_id"]: c for c in get_running_clones()}
+        if not rows and not running:
+            return await _reply(message, "📭 No clones.")
+        lines = ["👑 <b>All Clones</b>\n"]
+        seen = set()
+        for r in rows:
+            bid = int(r["bot_id"])
+            seen.add(bid)
+            un = r.get("username") or ""
             tag = f"@{un}" if un else str(bid)
-            lines.append(f"🟢 {tag} · owner <code>{c['owner_id']}</code> · <code>{bid}</code>")
-    await message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            online = "🟢" if bid in running else "🔴"
+            lines.append(f"{online} {tag} · owner <code>{r['owner_id']}</code>")
+        for bid, c in running.items():
+            if bid not in seen:
+                un = c.get("username") or ""
+                tag = f"@{un}" if un else str(bid)
+                lines.append(f"🟢 {tag} · owner <code>{c['owner_id']}</code>")
+        await _reply(message, "\n".join(lines))
+    except Exception as e:
+        await _reply(message, f"❌ {e}")
 
 
 print("[clone] plugin loaded OK — handlers registered", flush=True)
