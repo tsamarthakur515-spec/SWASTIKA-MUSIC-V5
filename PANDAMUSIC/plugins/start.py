@@ -156,7 +156,6 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup([
         [_btn(smallcaps("➕ add me in your group ➕"), _PRIMARY, url=add_url, icon_custom_emoji_id=E_START)],
-        [_btn("🎵 #MUSIC BOT", _SUCCESS, url=add_url, icon_custom_emoji_id=E_START)],
         [owner_btn, _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu", icon_custom_emoji_id=E_START)],
         [support_btn, update_btn],
         [_btn(smallcaps("help and commands"), _PRIMARY, callback_data="help_menu", icon_custom_emoji_id=E_START)],
