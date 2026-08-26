@@ -1,13 +1,15 @@
 # ---------------------------------------------------------------
 # PANDAMUSIC — clone.py
-# Hardened: regex + group=-5 so handler ALWAYS fires
+# regex group=-5 + Bot API fallback (kurigram send often broken)
 # ---------------------------------------------------------------
 
 print("[clone] loading plugin...", flush=True)
 
+import json
 import re
 import traceback
 
+import httpx
 from pyrogram import filters
 from pyrogram.enums import ChatType, ParseMode
 from pyrogram.types import Message
@@ -68,45 +70,133 @@ def _extract_token(message: Message) -> str:
     return ""
 
 
-async def _send(client, chat_id, text):
-    try:
-        return await client.send_message(chat_id, text, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        print(f"[clone] send HTML fail: {e}", flush=True)
-        try:
-            return await client.send_message(chat_id, re.sub(r"<[^>]+>", "", text))
-        except Exception as e2:
-            print(f"[clone] send plain fail: {e2}", flush=True)
-            return None
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text or "")
 
 
-async def _reply(message, text):
-    try:
-        return await message.reply_text(text, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        print(f"[clone] reply fail: {e}", flush=True)
-        try:
-            return await message._client.send_message(
-                message.chat.id, text, parse_mode=ParseMode.HTML
-            )
-        except Exception as e2:
-            print(f"[clone] send_message fail: {e2}", flush=True)
-            return None
-
-
-async def _edit(msg, text):
-    if not msg:
+async def _api_post(method: str, payload: dict):
+    token = getattr(console, "BOT_TOKEN", None)
+    if not token:
+        print("[clone] BOT_TOKEN missing", flush=True)
         return None
+    url = f"https://api.telegram.org/bot{token}/{method}"
     try:
-        return await msg.edit_text(text, parse_mode=ParseMode.HTML)
-    except Exception:
-        try:
-            return await msg.edit_text(re.sub(r"<[^>]+>", "", text))
-        except Exception:
-            try:
-                return await msg.reply_text(text, parse_mode=ParseMode.HTML)
-            except Exception:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(url, data=payload)
+            data = r.json()
+            if not data.get("ok"):
+                print(f"[clone] bot_api {method} fail: {data}", flush=True)
                 return None
+            return data.get("result")
+    except Exception as e:
+        print(f"[clone] bot_api {method} error: {e}", flush=True)
+        return None
+
+
+async def _api_send(chat_id, text: str):
+    """Send via Bot API HTTP — returns message_id or None."""
+    result = await _api_post(
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        },
+    )
+    if result:
+        return result.get("message_id")
+    result = await _api_post(
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": _strip_html(text)[:4096],
+            "disable_web_page_preview": "true",
+        },
+    )
+    return result.get("message_id") if result else None
+
+
+async def _api_edit(chat_id, message_id, text: str) -> bool:
+    if not message_id:
+        return False
+    r = await _api_post(
+        "editMessageText",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        },
+    )
+    if r is not None:
+        return True
+    r = await _api_post(
+        "editMessageText",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": _strip_html(text)[:4096],
+            "disable_web_page_preview": "true",
+        },
+    )
+    return r is not None
+
+
+class _Status:
+    """Minimal status holder for pyrogram msg OR bot-api message_id."""
+
+    def __init__(self, chat_id, msg=None, message_id=None):
+        self.chat_id = chat_id
+        self.msg = msg
+        self.message_id = message_id or (getattr(msg, "id", None) if msg else None)
+
+
+async def _reply(message, text) -> _Status | None:
+    chat_id = message.chat.id
+    # 1) pyrogram
+    try:
+        msg = await message.reply_text(text, parse_mode=ParseMode.HTML)
+        return _Status(chat_id, msg=msg)
+    except Exception as e:
+        print(f"[clone] pyrogram reply fail: {e}", flush=True)
+    try:
+        msg = await message.reply_text(_strip_html(text))
+        return _Status(chat_id, msg=msg)
+    except Exception as e:
+        print(f"[clone] pyrogram plain reply fail: {e}", flush=True)
+    # 2) Bot API HTTP
+    mid = await _api_send(chat_id, text)
+    if mid:
+        print(f"[clone] bot_api send ok mid={mid}", flush=True)
+        return _Status(chat_id, message_id=mid)
+    print("[clone] ALL send paths failed", flush=True)
+    return None
+
+
+async def _edit(status: _Status | None, text: str):
+    if not status:
+        return None
+    if status.msg:
+        try:
+            return await status.msg.edit_text(text, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            print(f"[clone] pyrogram edit fail: {e}", flush=True)
+            try:
+                return await status.msg.edit_text(_strip_html(text))
+            except Exception:
+                pass
+    if status.message_id:
+        ok = await _api_edit(status.chat_id, status.message_id, text)
+        if ok:
+            return status
+    # last resort: new message
+    mid = await _api_send(status.chat_id, text)
+    if mid:
+        status.message_id = mid
+        status.msg = None
+    return status
 
 
 async def _delete(message):
@@ -116,7 +206,6 @@ async def _delete(message):
         pass
 
 
-# group=-5 → runs early (same as rob/kill overrides)
 @bot.on_message(
     filters.regex(r"(?i)^/(clone|clonebot)(@\w+)?(?:\s|$)") & filters.incoming,
     group=-5,
@@ -124,13 +213,10 @@ async def _delete(message):
 async def clone_cmd(client, message: Message):
     uid = getattr(message.from_user, "id", None)
     chat_id = message.chat.id if message.chat else None
-    print(f"[clone] CMD HIT uid={uid} chat={chat_id} text={((message.text or '')[:120])!r}", flush=True)
-
-    # Instant proof reply — even if rest fails user sees this
-    try:
-        await client.send_message(chat_id, "⚡ Clone command received...")
-    except Exception as e:
-        print(f"[clone] instant send fail: {e}", flush=True)
+    print(
+        f"[clone] CMD HIT uid={uid} chat={chat_id} text={((message.text or '')[:120])!r}",
+        flush=True,
+    )
 
     try:
         if not message.from_user:
@@ -182,7 +268,7 @@ async def clone_token_paste(client, message: Message):
 
     text_raw = message.text or ""
     if CLONE_CMD_RE.match(text_raw.strip()):
-        return  # handled by clone_cmd
+        return
 
     text = _normalize_token(text_raw)
     m = TOKEN_FIND.search(text)
@@ -369,4 +455,4 @@ async def all_clones_cmd(client, message: Message):
         await _reply(message, f"❌ {e}")
 
 
-print("[clone] plugin loaded OK — handlers registered (group=-5 regex)", flush=True)
+print("[clone] plugin loaded OK — handlers registered (group=-5 + bot_api)", flush=True)
