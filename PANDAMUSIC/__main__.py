@@ -64,6 +64,15 @@ async def main():
     await call.decorators()
     await import_all_plugins()
 
+    # Start user clone bots (same handlers + assistants)
+    try:
+        from .modules.clones import start_all_saved_clones
+
+        n = await start_all_saved_clones()
+        console.logs(__name__).info(f"✅ Clone bots started: {n}")
+    except Exception as e:
+        console.logs(__name__).warning(f"⚠️ Clone restore skipped: {e}")
+
     console.logs(__name__).info("✅ Bot started successfully!")
     await pyrogram.idle()
 
