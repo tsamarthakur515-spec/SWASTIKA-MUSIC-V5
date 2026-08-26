@@ -86,10 +86,14 @@ try:
     SHRUTI_API_URL = _env_str("SHRUTI_API_URL", "https://aruyt.up.railway.app") or "https://aruyt.up.railway.app"
     SHRUTI_API_KEY = _env_str("SHRUTI_API_KEY", "")
 
-    # Groq chatbot API — default model that works on current Groq keys
     GROQ_API_KEY = _env_str("GROQ_API_KEY", "") or ""
     GROQ_API_BASE = _env_str("GROQ_API_BASE", "https://api.groq.com/openai/v1") or "https://api.groq.com/openai/v1"
     GROQ_MODEL = _env_str("GROQ_MODEL", "openai/gpt-oss-20b") or "openai/gpt-oss-20b"
+
+    # Same style as BOT_TOKEN — panel Config.env me daalo
+    GITHUB_TOKEN = _env_str("GITHUB_TOKEN", "") or ""
+    GITHUB_REPO = _env_str("GITHUB_REPO", "tsamarthakur515-spec/SWASTIKA-MUSIC-V5") or "tsamarthakur515-spec/SWASTIKA-MUSIC-V5"
+    GITHUB_BRANCH = _env_str("GITHUB_BRANCH", "main") or "main"
 except Exception as e:
     logs(__name__).error(f"Variable Error: {e}")
     sys.exit(1)
