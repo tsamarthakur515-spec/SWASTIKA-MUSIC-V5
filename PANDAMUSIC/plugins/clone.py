@@ -1,12 +1,9 @@
 # ---------------------------------------------------------------
-# PANDAMUSIC — clone.py
-# /clone  /myclones  /delclone  /clones
-# Users clone this bot with their BOT_TOKEN (all features shared)
+# PANDAMUSIC — clone.py (fixed)
+# /clone  /myclones  /delclone  /clones  /cloneping
 # ---------------------------------------------------------------
 
 print("[clone] loading plugin...", flush=True)
-
-import re
 
 from pyrogram import filters
 from pyrogram.enums import ChatType, ParseMode
@@ -14,46 +11,36 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .. import bot, console
 from ..modules.clones import (
-    TOKEN_RE,
     db_list_clones,
     get_running_clones,
+    is_bot_token,
     start_clone_client,
     stop_clone_client,
     user_can_clone,
-    validate_bot_token,
 )
-from ..modules.custom_emojis import E, tg_emoji
 from ..modules.formatters import smallcaps
 
-# Waiting for token in PM: user_id -> True
-_pending_token: dict[int, bool] = {}
+_pending_token = {}
 
 
-def _is_owner(uid: int) -> bool:
+def _is_owner(uid):
     return bool(uid and uid == getattr(console, "OWNER_ID", 0))
 
 
-def _clone_help_text() -> str:
+def _help_text():
     return (
-        f"{tg_emoji(E.SPARKLES, '✨')} <b>𝗦𝘄𝗮𝘀𝘁𝗶𝗸𝗮 𝗖𝗹𝗼𝗻𝗲</b>\n\n"
-        f"{smallcaps('apna music bot banao — saari features ke sath')}\n\n"
-        f"<b>{smallcaps('kya milta hai')}:</b>\n"
-        f"• music / vplay / pause / skip / end\n"
-        f"• moderation, locks, welcome, tagall\n"
-        f"• chatbot, games, stats, broadcast\n"
-        f"• same assistants + voice chat quality\n\n"
-        f"<b>{smallcaps('kaise clone kare')}:</b>\n"
-        f"1. @BotFather se naya bot banao → /newbot\n"
-        f"2. BotFather se <b>BOT_TOKEN</b> copy karo\n"
-        f"3. Yahan PM me bhejo:\n"
-        f"   <code>/clone 123456:ABC-DEF...</code>\n"
-        f"   ya /clone dabake token alag message me bhejo\n\n"
-        f"<b>{smallcaps('commands')}:</b>\n"
-        f"• <code>/clone</code> — help / start\n"
-        f"• <code>/clone TOKEN</code> — clone create\n"
-        f"• <code>/myclones</code> — mere clones\n"
-        f"• <code>/delclone BOT_ID</code> — clone delete\n\n"
-        f"⚠️ Token <b>sirf private chat</b> me bhejo. Group me mat bhejo."
+        "✨ <b>Swastika Clone</b>\n\n"
+        f"{smallcaps('apna music bot — full features')}\n\n"
+        "<b>Steps:</b>\n"
+        "1. @BotFather → /newbot → token copy\n"
+        "2. Yahan PM me bhejo:\n"
+        "   <code>/clone YOUR_BOT_TOKEN</code>\n\n"
+        "<b>Commands:</b>\n"
+        "• <code>/clone TOKEN</code> — create\n"
+        "• <code>/myclones</code> — list\n"
+        "• <code>/delclone BOT_ID</code> — delete\n"
+        "• Clone bot pe <code>/cloneping</code> — test\n\n"
+        "⚠️ Token sirf <b>private chat</b> me bhejo."
     )
 
 
@@ -66,36 +53,30 @@ async def clone_cmd(client, message: Message):
         return
 
     uid = message.from_user.id
-    is_private = message.chat and message.chat.type == ChatType.PRIVATE
+    is_private = bool(message.chat and message.chat.type == ChatType.PRIVATE)
 
-    # Token in command args
     args = message.command or []
-    token = ""
-    if len(args) >= 2:
-        token = args[1].strip()
+    token = args[1].strip() if len(args) >= 2 else ""
+
+    # Full message after /clone  (token might have been split wrong — rare)
+    if not token and message.text and len(message.text.split(None, 1)) > 1:
+        rest = message.text.split(None, 1)[1].strip()
+        if is_bot_token(rest):
+            token = rest
 
     if not token:
         if not is_private:
             return await message.reply_text(
-                "🔒 Clone setup sirf <b>private chat</b> me hota hai.\n"
-                "Bot ko PM karo aur <code>/clone</code> bhejo.",
+                "🔒 Clone sirf <b>PM</b> me.\nBot ko private message karo → <code>/clone</code>",
                 parse_mode=ParseMode.HTML,
             )
         _pending_token[uid] = True
-        kb = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "BotFather ↗", url="https://t.me/BotFather"
-                    )
-                ]
-            ]
-        )
         return await message.reply_text(
-            _clone_help_text()
-            + "\n\n➡️ Ab apna <b>BOT_TOKEN</b> is chat me bhej do.",
+            _help_text() + "\n\n➡️ Ab <b>BOT_TOKEN</b> bhej do.",
             parse_mode=ParseMode.HTML,
-            reply_markup=kb,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("BotFather", url="https://t.me/BotFather")]]
+            ),
             disable_web_page_preview=True,
         )
 
@@ -105,7 +86,7 @@ async def clone_cmd(client, message: Message):
         except Exception:
             pass
         return await message.reply_text(
-            "🔒 Security: token group me mat bhejo. Bot ko PM karo.",
+            "🔒 Token group me mat bhejo — bot ko PM karo.",
             parse_mode=ParseMode.HTML,
         )
 
@@ -113,28 +94,30 @@ async def clone_cmd(client, message: Message):
 
 
 @bot.on_message(
-    filters.private & filters.text & filters.incoming & ~filters.command(
-        ["clone", "clonebot", "myclones", "delclone", "clones", "start", "help"],
-        ["/", "!", "."],
-    ),
-    group=5,
+    filters.private & filters.text & filters.incoming & ~filters.via_bot,
+    group=8,
 )
 async def clone_token_listener(client, message: Message):
+    """Accept raw token message after /clone."""
     if not message.from_user:
         return
     uid = message.from_user.id
     if not _pending_token.get(uid):
         return
+
+    # Ignore commands
     text = (message.text or "").strip()
-    if not TOKEN_RE.match(text):
-        # might be normal chat — ignore if doesn't look like token
-        if ":" not in text or len(text) < 30:
-            return
-        return await message.reply_text(
-            "❌ Invalid token format.\n"
-            "Example: <code>123456789:AAHxxxx...</code>",
-            parse_mode=ParseMode.HTML,
-        )
+    if text.startswith(("/", "!", ".")):
+        return
+
+    if not is_bot_token(text):
+        if ":" in text and len(text) > 25:
+            return await message.reply_text(
+                "❌ Token format galat.\nExample: <code>123456789:AAHxxxx...</code>",
+                parse_mode=ParseMode.HTML,
+            )
+        return  # normal chat — ignore
+
     _pending_token.pop(uid, None)
     await _do_clone(client, message, text)
 
@@ -142,8 +125,8 @@ async def clone_token_listener(client, message: Message):
 async def _do_clone(client, message: Message, token: str):
     uid = message.from_user.id
     token = token.strip()
+    chat_id = message.chat.id
 
-    # Delete message that contains the token
     try:
         await message.delete()
     except Exception:
@@ -151,64 +134,45 @@ async def _do_clone(client, message: Message, token: str):
 
     ok, reason = await user_can_clone(uid)
     if not ok:
+        return await client.send_message(chat_id, f"❌ {reason}")
+
+    if not is_bot_token(token):
         return await client.send_message(
-            message.chat.id, f"❌ {reason}", parse_mode=ParseMode.HTML
+            chat_id,
+            "❌ Invalid token.\nFormat: <code>123456789:AAHxxxx...</code>",
+            parse_mode=ParseMode.HTML,
         )
 
     status = await client.send_message(
-        message.chat.id,
-        f"{tg_emoji(E.LOADER, '⏳')} {smallcaps('token check ho raha hai...')}",
-        parse_mode=ParseMode.HTML,
-    )
-
-    info = await validate_bot_token(token)
-    if not info:
-        return await status.edit_text(
-            "❌ Invalid / expired bot token.\n"
-            "@BotFather se naya token lo aur dubara try karo.",
-            parse_mode=ParseMode.HTML,
-        )
-
-    # Already running?
-    running = {c["bot_id"]: c for c in get_running_clones()}
-    if info["id"] in running:
-        return await status.edit_text(
-            f"⚠️ Ye bot pehle se online hai.\n"
-            f"🤖 @{info['username'] or info['id']}\n"
-            f"🆔 <code>{info['id']}</code>",
-            parse_mode=ParseMode.HTML,
-        )
-
-    await status.edit_text(
-        f"{tg_emoji(E.LOADER, '⏳')} {smallcaps('clone start ho raha hai...')}",
-        parse_mode=ParseMode.HTML,
+        chat_id, "⏳ Token check + clone start ho raha hai..."
     )
 
     try:
-        entry = await start_clone_client(
-            token,
-            uid,
-            bot_id=info["id"],
-            username=info.get("username") or "",
-            name=info.get("name") or "",
-        )
+        entry = await start_clone_client(token, uid)
     except Exception as e:
+        err = str(e)
+        print(f"[clone] start error: {e}", flush=True)
         return await status.edit_text(
-            f"❌ Clone start fail:\n<code>{e}</code>",
+            f"❌ Clone fail:\n<code>{err[:500]}</code>\n\n"
+            "• Token @BotFather se naya lo\n"
+            "• Main bot token mat use karo\n"
+            "• API_ID/API_HASH config me sahi hone chahiye",
             parse_mode=ParseMode.HTML,
         )
 
     uname = entry.get("username") or ""
     mention = f"@{uname}" if uname else f"<code>{entry['bot_id']}</code>"
     await status.edit_text(
-        f"{tg_emoji(E.CHECK, '✅')} <b>Clone ready!</b>\n\n"
-        f"🤖 Bot: {mention}\n"
-        f"📛 Name: <b>{entry.get('name') or 'Clone'}</b>\n"
+        f"✅ <b>Clone ready!</b>\n\n"
+        f"🤖 {mention}\n"
+        f"📛 {entry.get('name') or 'Clone'}\n"
         f"🆔 <code>{entry['bot_id']}</code>\n\n"
-        f"{smallcaps('ab is bot ko group me add karo (admin + invite + manage video chats)')}\n"
-        f"{smallcaps('saari features main bot jaisi chalengi.')}\n\n"
-        f"• /myclones — list\n"
-        f"• /delclone {entry['bot_id']} — delete",
+        f"1. Is bot ko group me add karo\n"
+        f"2. Admin banao (manage video chats)\n"
+        f"3. Clone bot pe <code>/cloneping</code> try karo\n"
+        f"4. Phir <code>/play song</code>\n\n"
+        f"• /myclones\n"
+        f"• /delclone {entry['bot_id']}",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
@@ -223,16 +187,10 @@ async def myclones_cmd(client, message: Message):
         return
     uid = message.from_user.id
     rows = await db_list_clones(uid)
-    running = {c["bot_id"] for c in get_running_clones() if c["owner_id"] == uid}
+    running_ids = {
+        c["bot_id"] for c in get_running_clones() if c["owner_id"] == uid
+    }
 
-    if not rows and not running:
-        return await message.reply_text(
-            f"📭 {smallcaps('abhi koi clone nahi.')}\n"
-            f"<code>/clone</code> se naya banao.",
-            parse_mode=ParseMode.HTML,
-        )
-
-    # merge by bot_id
     seen = {}
     for r in rows:
         seen[int(r["bot_id"])] = r
@@ -240,15 +198,18 @@ async def myclones_cmd(client, message: Message):
         if c["owner_id"] == uid:
             seen[int(c["bot_id"])] = {**seen.get(int(c["bot_id"]), {}), **c}
 
-    lines = [f"{tg_emoji(E.STAR, '🌟')} <b>Your Clones</b>\n"]
+    if not seen:
+        return await message.reply_text(
+            "📭 Koi clone nahi.\n<code>/clone</code> se banao.",
+            parse_mode=ParseMode.HTML,
+        )
+
+    lines = ["🌟 <b>Your Clones</b>\n"]
     for i, (bid, r) in enumerate(seen.items(), 1):
         un = r.get("username") or ""
         tag = f"@{un}" if un else f"<code>{bid}</code>"
-        online = "🟢" if bid in running or bid in {x['bot_id'] for x in get_running_clones()} else "🔴"
-        lines.append(
-            f"{i}. {online} {tag}\n"
-            f"   🆔 <code>{bid}</code> · /delclone {bid}"
-        )
+        online = "🟢" if bid in running_ids else "🔴"
+        lines.append(f"{i}. {online} {tag}\n   🆔 <code>{bid}</code> · /delclone {bid}")
     await message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
@@ -264,8 +225,7 @@ async def delclone_cmd(client, message: Message):
     args = message.command or []
     if len(args) < 2:
         return await message.reply_text(
-            "<b>Usage:</b> <code>/delclone BOT_ID</code>\n"
-            "Apna bot id <code>/myclones</code> se dekho.",
+            "Usage: <code>/delclone BOT_ID</code>\n<code>/myclones</code> se id lo.",
             parse_mode=ParseMode.HTML,
         )
 
@@ -274,9 +234,7 @@ async def delclone_cmd(client, message: Message):
     if raw.isdigit():
         target_id = int(raw)
     else:
-        # match username from list
-        rows = await db_list_clones(None if _is_owner(uid) else uid)
-        for r in rows:
+        for r in await db_list_clones(None if _is_owner(uid) else uid):
             if (r.get("username") or "").lower() == raw.lower():
                 target_id = int(r["bot_id"])
                 break
@@ -290,10 +248,8 @@ async def delclone_cmd(client, message: Message):
     if not target_id:
         return await message.reply_text("❌ Clone not found.")
 
-    # ownership check
-    rows = await db_list_clones()
     owner_of = None
-    for r in rows:
+    for r in await db_list_clones():
         if int(r["bot_id"]) == target_id:
             owner_of = int(r["owner_id"])
             break
@@ -306,11 +262,11 @@ async def delclone_cmd(client, message: Message):
     if owner_of is None:
         return await message.reply_text("❌ Clone not found.")
     if owner_of != uid and not _is_owner(uid):
-        return await message.reply_text("❌ Ye clone tumhara nahi hai.")
+        return await message.reply_text("❌ Ye clone tumhara nahi.")
 
     await stop_clone_client(target_id)
     await message.reply_text(
-        f"✅ Clone stopped & removed.\n🆔 <code>{target_id}</code>",
+        f"✅ Clone removed.\n🆔 <code>{target_id}</code>",
         parse_mode=ParseMode.HTML,
     )
 
@@ -346,7 +302,6 @@ async def all_clones_cmd(client, message: Message):
             lines.append(
                 f"🟢 {tag} · owner <code>{c['owner_id']}</code> · <code>{bid}</code>"
             )
-
     await message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
