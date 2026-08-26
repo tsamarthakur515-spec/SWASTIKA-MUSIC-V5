@@ -22,6 +22,34 @@ assistantids = []
 STREAM_GRACE_SECONDS = 12
 
 
+def _safe_update_chat_id(update) -> int | None:
+    """Resolve chat_id from pytgcalls/kurigram update without AttributeError."""
+    if update is None:
+        return None
+    try:
+        cid = getattr(update, "chat_id", None)
+        if cid is not None:
+            return int(cid)
+    except Exception:
+        pass
+    for attr in ("chat", "peer"):
+        try:
+            obj = getattr(update, attr, None)
+            if obj is None:
+                continue
+            if isinstance(obj, int):
+                return int(obj)
+            oid = getattr(obj, "id", None)
+            if oid is not None:
+                return int(oid)
+            channel_id = getattr(obj, "channel_id", None)
+            if channel_id is not None:
+                return int(f"-100{channel_id}")
+        except Exception:
+            continue
+    return None
+
+
 def _assistant_info_text(assistant) -> str:
     """Build readable assistant identity for user-facing errors."""
     name = getattr(assistant, "name", None) or "Unknown"
@@ -265,7 +293,6 @@ class Call(PyTgCalls):
             if status == ChatMemberStatus.LEFT:
                 return await try_join()
 
-            # Banned / restricted / kicked
             if status in (
                 ChatMemberStatus.BANNED,
                 getattr(ChatMemberStatus, "RESTRICTED", None),
@@ -303,7 +330,6 @@ class Call(PyTgCalls):
             raise AssistantErr(f"Unexpected error while checking assistant: {e}")
 
     async def _restart_current_stream(self, chat_id: int) -> bool:
-        """Restart current track. Video → try audio-only if video keeps dying."""
         queued = self.queue.get(chat_id) or []
         if not queued:
             return False
@@ -323,7 +349,6 @@ class Call(PyTgCalls):
             return False
 
         is_video = bool(item.get("is_video", False))
-        # First restart on video: fall back to audio-only (keeps assistant in VC)
         force_audio = is_video and restarts >= 0
 
         try:
@@ -374,7 +399,6 @@ class Call(PyTgCalls):
         is_video = bool(item.get("is_video", False))
         media_stream = item.get("media_stream")
 
-        # Rebuild stream properly for video if we have file path
         if file_path:
             try:
                 media_stream = self._build_media_stream(file_path, is_video, 0)
@@ -438,7 +462,6 @@ class Call(PyTgCalls):
     async def start_stream(self, chat_id: int, media_stream):
         assistant = await group_assistant(self, chat_id)
 
-        # Must succeed before play — do not swallow AssistantErr (banned, no invite, etc.)
         await self.ensure_assistant_in_chat(chat_id)
 
         try:
@@ -465,7 +488,6 @@ class Call(PyTgCalls):
                     "Unban assistant, make bot admin, then try again."
                 )
 
-        # Retry once after ensuring join again
         await self.ensure_assistant_in_chat(chat_id)
 
         try:
@@ -525,7 +547,6 @@ class Call(PyTgCalls):
 
         start_sec = max(0, int(start_sec or 0))
 
-        # Prefer stable lower quality for VC — high res video often kills the call
         attempts = []
 
         if is_video:
@@ -533,7 +554,6 @@ class Call(PyTgCalls):
             try:
                 from pytgcalls.types import VideoQuality
 
-                # Prefer lower quality first for stability in Telegram VC
                 for name in ("SD_360p", "SD_480p", "HD_720p", "HD_1080p", "FHD_1080p"):
                     if hasattr(VideoQuality, name):
                         video_param = getattr(VideoQuality, name)
@@ -621,7 +641,6 @@ class Call(PyTgCalls):
         raise RuntimeError(f"MediaStream build failed: {last_err}")
 
     async def seek_stream(self, chat_id: int, position: int):
-        """Seek by restarting stream from position (local file + ffmpeg -ss)."""
         position = max(0, int(position))
         queued = self.queue.get(chat_id) or []
         if not queued:
@@ -784,7 +803,11 @@ class Call(PyTgCalls):
         @self.four.on_update(fl.chat_update(ChatUpdate.Status.LEFT_GROUP))
         @self.five.on_update(fl.chat_update(ChatUpdate.Status.LEFT_GROUP))
         async def stream_services_handler(_, update: Update):
-            return await self.close_stream(update.chat_id)
+            chat_id = _safe_update_chat_id(update)
+            if chat_id is None:
+                print("[stream] skip close — no chat_id on update", flush=True)
+                return
+            return await self.close_stream(chat_id)
 
         @self.one.on_update(fl.stream_end())
         @self.two.on_update(fl.stream_end())
@@ -792,11 +815,14 @@ class Call(PyTgCalls):
         @self.four.on_update(fl.stream_end())
         @self.five.on_update(fl.stream_end())
         async def stream_end_handler(_, update: Update):
-            chat_id = update.chat_id
+            chat_id = _safe_update_chat_id(update)
+            if chat_id is None:
+                print("[stream_end] skip — no chat_id on update", flush=True)
+                return
+
             start = self.start_times.get(chat_id)
             elapsed = (time.time() - start) if start else 999
 
-            # Premature end (common on bad / incompatible video) → restart instead of leave
             if elapsed < STREAM_GRACE_SECONDS:
                 print(
                     f"[stream_end] premature end after {elapsed:.1f}s chat={chat_id} — trying restart",
