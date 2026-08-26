@@ -18,6 +18,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from .. import bot, cdx, rgx, console
 from ..modules.formatters import smallcaps
 from ..modules.custom_emojis import tg_emoji
+from ..modules.bot_api import bot_api_edit_message, bot_api_answer_callback
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -253,55 +254,96 @@ def fun_caption() -> str:
 
 
 async def _edit(query, text, markup):
+    """Edit games menus — Bot API first (kurigram broken)."""
+    msg = query.message
+    chat_id = msg.chat.id
+    message_id = msg.id
+    is_photo = bool(getattr(msg, "photo", None))
+
+    ok = await bot_api_edit_message(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=text,
+        caption=text,
+        reply_markup=markup,
+        is_photo=is_photo,
+    )
+    if ok:
+        print("[games] menu edit via Bot API OK", flush=True)
+        return
+
     try:
-        await query.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        if is_photo:
+            await msg.edit_caption(
+                caption=text, reply_markup=markup, parse_mode=ParseMode.HTML
+            )
+        else:
+            await msg.edit_text(
+                text, reply_markup=markup, parse_mode=ParseMode.HTML
+            )
+        return
+    except Exception as e:
+        print(f"[games] pyrogram edit failed: {e}", flush=True)
+
+    try:
+        await msg.edit_caption(caption=text, parse_mode=ParseMode.HTML)
     except Exception:
         try:
-            await query.message.edit_caption(caption=text, reply_markup=markup, parse_mode=ParseMode.HTML)
+            await msg.edit_text(text, parse_mode=ParseMode.HTML)
+        except Exception as e2:
+            print(f"[games] edit no-kb failed: {e2}", flush=True)
+
+
+async def _answer(query, text="", show_alert=False):
+    try:
+        await query.answer(text, show_alert=show_alert)
+    except Exception:
+        try:
+            await bot_api_answer_callback(query.id, text=text, show_alert=show_alert)
         except Exception:
             pass
 
 
 # ── Menu callbacks ─────────────────────────────────────────────
 
-@bot.on_callback_query(rgx("games_menu"))
+@bot.on_callback_query(rgx("^games_menu$"))
 async def games_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit(query, games_menu_caption(), games_menu_markup())
-    await query.answer()
+    await _answer(query)
 
 
-@bot.on_callback_query(rgx("games_social"))
+@bot.on_callback_query(rgx("^games_social$"))
 async def games_social_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit(query, social_caption(), games_back_markup())
-    await query.answer()
+    await _answer(query)
 
 
-@bot.on_callback_query(rgx("games_economy"))
+@bot.on_callback_query(rgx("^games_economy$"))
 async def games_economy_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit(query, economy_caption(), games_back_markup())
-    await query.answer()
+    await _answer(query)
 
 
-@bot.on_callback_query(rgx("games_rpg"))
+@bot.on_callback_query(rgx("^games_rpg$"))
 async def games_rpg_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit(query, rpg_caption(), games_back_markup())
-    await query.answer()
+    await _answer(query)
 
 
-@bot.on_callback_query(rgx("games_fun"))
+@bot.on_callback_query(rgx("^games_fun$"))
 async def games_fun_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit(query, fun_caption(), games_back_markup())
-    await query.answer()
+    await _answer(query)
 
 
 # ── Economy ────────────────────────────────────────────────────
