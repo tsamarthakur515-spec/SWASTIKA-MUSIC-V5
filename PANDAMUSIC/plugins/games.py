@@ -21,6 +21,16 @@ from ..modules.custom_emojis import tg_emoji
 from ..modules.bot_api import bot_api_edit_message, bot_api_answer_callback
 from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
+try:
+    from pyrogram.enums import ButtonStyle
+    _PRIMARY = ButtonStyle.PRIMARY
+    _SUCCESS = ButtonStyle.SUCCESS
+    _DANGER = ButtonStyle.DANGER
+except Exception:
+    _PRIMARY = "primary"
+    _SUCCESS = "success"
+    _DANGER = "danger"
+
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _DB = os.path.join(_BASE, "games_db.json")
 _RNG = secrets.SystemRandom()
@@ -170,8 +180,17 @@ async def _target_user(client, message: Message):
     return None
 
 
-def _btn(text, **kwargs):
+def _btn(text, style=None, **kwargs):
     kwargs.setdefault("icon_custom_emoji_id", E_GAMES)
+    if style is not None:
+        try:
+            return InlineKeyboardButton(text, style=style, **kwargs)
+        except TypeError:
+            pass
+        try:
+            return InlineKeyboardButton(text, style=str(getattr(style, "name", style)).lower(), **kwargs)
+        except TypeError:
+            pass
     try:
         return InlineKeyboardButton(text, **kwargs)
     except TypeError:
@@ -181,16 +200,24 @@ def _btn(text, **kwargs):
 
 def games_menu_markup():
     return InlineKeyboardMarkup([
-        [_btn("Social", callback_data="games_social"), _btn("Economy", callback_data="games_economy")],
-        [_btn("RPG", callback_data="games_rpg"), _btn("AI & Fun", callback_data="games_fun")],
-        [_btn("Back", callback_data="help_menu")],
+        [
+            _btn("Social", _PRIMARY, callback_data="games_social"),
+            _btn("Economy", _SUCCESS, callback_data="games_economy"),
+        ],
+        [
+            _btn("RPG", _DANGER, callback_data="games_rpg"),
+            _btn("AI & Fun", _SUCCESS, callback_data="games_fun"),
+        ],
+        [
+            _btn("Back", _DANGER, callback_data="help_menu"),
+        ],
     ])
 
 
 def games_back_markup():
     return InlineKeyboardMarkup([[
-        _btn("Games", callback_data="games_menu"),
-        _btn("Help", callback_data="help_menu"),
+        _btn("Games", _PRIMARY, callback_data="games_menu"),
+        _btn("Help", _SUCCESS, callback_data="help_menu"),
     ]])
 
 
