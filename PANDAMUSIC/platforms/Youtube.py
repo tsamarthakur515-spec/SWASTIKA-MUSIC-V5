@@ -8,7 +8,7 @@ import aiohttp
 from .. import console
 
 API_URL = getattr(console, "SHRUTI_API_URL", None) or "https://aruyt.up.railway.app"
-API_KEY = getattr(console, "SHRUTI_API_KEY", None) or "YUKI-XJd3KfUSWeuOWsiZyuIrlmQf"
+API_KEY = getattr(console, "SHRUTI_API_KEY", None) or "YUKI-zi4hcOkYs0tBIAX9QzDc9iTn"
 DOWNLOAD_DIR = "downloads"
 
 _dl_locks: Dict[str, asyncio.Lock] = {}
