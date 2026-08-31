@@ -11,7 +11,7 @@ import pyrogram
 from pyrogram import filters
 from pyrogram.enums import ParseMode
 
-from . import app, bot, call, console
+from . import console
 from .modules.database import init_db
 from .plugins import import_all_plugins
 
@@ -32,7 +32,7 @@ def _force_load_clone_plugin() -> bool:
         return False
 
 
-def _register_emergency_clone_handler():
+def _register_emergency_clone_handler(bot):
     token_re = re.compile(r"(\d{5,15}:[A-Za-z0-9_-]{20,100})")
 
     @bot.on_message(filters.command(["clone", "clonebot"], prefixes=["/", "!", "."]))
@@ -96,6 +96,12 @@ def _register_emergency_clone_handler():
 
 
 async def main():
+    # Create clients NOW that the event loop is running
+    from . import init_clients
+
+    init_clients()
+    from . import app, bot, call
+
     for file in os.listdir():
         if file.endswith(".session") or file.endswith(".session-journal"):
             try:
@@ -142,7 +148,7 @@ async def main():
 
     ok = _force_load_clone_plugin()
     if not ok:
-        _register_emergency_clone_handler()
+        _register_emergency_clone_handler(bot)
 
     try:
         from .modules.clones import start_all_saved_clones
