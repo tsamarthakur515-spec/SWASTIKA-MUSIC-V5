@@ -1,6 +1,14 @@
+import asyncio
 import os
 import sys
 import runpy
+
+# Python 3.10+ / 3.14 fix: create event loop BEFORE any pyrogram/kurigram import
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
 # Root directory set karo
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -17,4 +25,6 @@ if __name__ == "__main__":
         print("\nBot stopped by user.")
     except Exception as e:
         print(f"Failed to start bot: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
