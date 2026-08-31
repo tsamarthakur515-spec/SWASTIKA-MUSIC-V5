@@ -9,6 +9,25 @@ import logging
 
 log = logging.getLogger(__name__)
 
+# ── HOTFIX: py-tgcalls / basiccalls expects GroupcallForbidden in pyrogram.errors ──
+try:
+    import pyrogram.errors as _pe
+
+    if not hasattr(_pe, "GroupcallForbidden"):
+        # Prefer existing GroupCallForbidden if present, else create a dummy
+        if hasattr(_pe, "GroupCallForbidden"):
+            _pe.GroupcallForbidden = _pe.GroupCallForbidden  # type: ignore
+        else:
+            class GroupcallForbidden(Exception):
+                """The group call has already ended / is forbidden."""
+                pass
+
+            _pe.GroupcallForbidden = GroupcallForbidden  # type: ignore
+        log.info("kurigram_patch: injected pyrogram.errors.GroupcallForbidden")
+except Exception as e:
+    log.warning("kurigram_patch: GroupcallForbidden hotfix failed: %s", e)
+# ────────────────────────────────────────────────────────────────────────────────
+
 
 def _peer_to_chat_id(peer):
     """Convert InputPeer / Peer* to pyrogram-style chat_id."""
