@@ -2,36 +2,43 @@ import asyncio
 import os
 import sys
 import runpy
+from concurrent.futures import ThreadPoolExecutor
 
 # ============================================================
-# CRITICAL HOTFIX — MUST run BEFORE any PANDAMUSIC / pytgcalls import
-# py-tgcalls / basiccalls does: from pyrogram.errors import GroupcallForbidden
-# but kurigram/pyrogram sometimes doesn't export it → ImportError
+# CRITICAL HOTFIXES — MUST run BEFORE any PANDAMUSIC / pytgcalls import
 # ============================================================
+
+# 1. Event loop for Python 3.10+
 try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# 2. GroupcallForbidden + crypto_executor for kurigram / py-tgcalls
+try:
+    import pyrogram
     import pyrogram.errors as _pe
 
+    # GroupcallForbidden
     if not hasattr(_pe, "GroupcallForbidden"):
         if hasattr(_pe, "GroupCallForbidden"):
             _pe.GroupcallForbidden = _pe.GroupCallForbidden  # type: ignore
         else:
 
             class GroupcallForbidden(Exception):
-                """The group call has already ended / is forbidden."""
-
                 pass
 
             _pe.GroupcallForbidden = GroupcallForbidden  # type: ignore
+
+    # crypto_executor (removed in some kurigram versions)
+    if not hasattr(pyrogram, "crypto_executor"):
+        pyrogram.crypto_executor = ThreadPoolExecutor(
+            1, thread_name_prefix="CryptoWorker"
+        )
 except Exception:
     pass
 # ============================================================
-
-# Python 3.10+ / 3.14 fix: create event loop BEFORE any pyrogram/kurigram import
-try:
-    loop = asyncio.get_running_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
 # Root directory set karo
 ROOT = os.path.dirname(os.path.abspath(__file__))
